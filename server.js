@@ -27,16 +27,28 @@ const PORT = process.env.PORT || 4000;
 app.use(helmet());
 
 
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://doyles-coffee-front.vercel.app",        // if you used the Vercel-generated domain
+  "https://www.doylesbreakroomservices.com"        // your custom domain
+];
+
 app.use(
   cors({
-    origin: [
-      "http://doyles-coffee-front.vercel.app/",
-      "http://www.doylesbreakroomservices.com/",
-      "http://doylesbreakroomservices.com/",
-    ],
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.log("Blocked by CORS:", origin);
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
 
 
 
