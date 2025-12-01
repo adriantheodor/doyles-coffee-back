@@ -1,40 +1,14 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const issueReportSchema = new mongoose.Schema({
-  customer: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+const IssueReportSchema = new mongoose.Schema(
+  {
+    customerName: { type: String, required: true },
+    customerEmail: { type: String, required: true },
+    subject: { type: String, required: true },
+    description: { type: String, required: true },
+    status: { type: String, default: "open" }, // open | resolved
   },
-  title: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  description: {
-    type: String,
-    required: true
-  },
-  photoUrl: {
-    type: String,
-    default: ''
-  },
-  status: {
-    type: String,
-    enum: ['Open', 'In Progress', 'Resolved'],
-    default: 'Open'
-  },
-  adminNotes: {
-    type: String,
-    default: ''
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  resolvedAt: {
-    type: Date
-  }
-});
+  { timestamps: true }
+);
 
-module.exports = mongoose.model('IssueReport', issueReportSchema);
+module.exports = mongoose.model("IssueReport", IssueReportSchema);

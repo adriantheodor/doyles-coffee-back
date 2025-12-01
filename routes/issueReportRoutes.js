@@ -52,4 +52,13 @@ router.put("/:id/status", authenticateToken, requireRole("admin"), async (req, r
   }
 });
 
+router.delete("/:id", authenticateToken, requireRole("admin"), async (req, res) => {
+  try {
+    await IssueReport.findByIdAndDelete(req.params.id);
+    res.json({ message: "Issue deleted" });
+  } catch {
+    res.status(500).json({ error: "Could not delete issue" });
+  }
+});
+
 module.exports = router;
