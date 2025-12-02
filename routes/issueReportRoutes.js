@@ -7,21 +7,21 @@ const { authenticateToken, requireRole } = require("../middleware/auth");
 // CREATE issue (customer)
 router.post("/", authenticateToken, async (req, res) => {
   try {
-    const { subject, title, description } = req.body;
     const issue = new IssueReport({
-      title: title || subject,
-      description: description,
-
-      customer: req.user.id,
+      customer: req.user.id, 
+      title: req.body.title, 
+      description: req.body.description,
+      photoUrl: req.body.photoUrl || "",
     });
 
     await issue.save();
     res.status(201).json(issue);
   } catch (err) {
-    console.error("Issue Submit Error:", err); // Log specific error to console for debugging
-    res
-      .status(400)
-      .json({ message: "Error submitting issue", error: err.message });
+    console.error("Issue Submit Error:", err);
+    res.status(400).json({
+      message: "Error submitting issue",
+      error: err.message,
+    });
   }
 });
 
