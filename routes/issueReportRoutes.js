@@ -8,8 +8,8 @@ const { authenticateToken, requireRole } = require("../middleware/auth");
 router.post("/", authenticateToken, async (req, res) => {
   try {
     const issue = new IssueReport({
-      customer: req.user.id, 
-      title: req.body.title, 
+      customer: req.user.id,
+      title: req.body.title,
       description: req.body.description,
       photoUrl: req.body.photoUrl || "",
     });
@@ -28,7 +28,7 @@ router.post("/", authenticateToken, async (req, res) => {
 // GET all issues (admin)
 router.get("/", authenticateToken, requireRole("admin"), async (req, res) => {
   try {
-    const issues = await IssueReport.find().populate("user");
+    const issues = await IssueReport.find().populate("customer");
     res.json(issues);
   } catch (err) {
     res.status(500).json({ message: "Error fetching issues" });
@@ -38,7 +38,7 @@ router.get("/", authenticateToken, requireRole("admin"), async (req, res) => {
 // GET my issues (customer)
 router.get("/my", authenticateToken, async (req, res) => {
   try {
-    const issues = await IssueReport.find({ user: req.user.id });
+    const issues = await IssueReport.find({ customer: req.user.id });
     res.json(issues);
   } catch (err) {
     res.status(500).json({ message: "Error fetching your issues" });
