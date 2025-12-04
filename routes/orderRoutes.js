@@ -9,28 +9,35 @@ router.post("/", authenticateToken, async (req, res) => {
   try {
     const { items, notes } = req.body;
 
-    // Calculate total
-    let total = 0;
+    if (!items || !items.length)
+      return res.status(400).json({ message: "Order must include items." });
 
-    for (const item of items) {
-      const product = await Product.findById(item.product);
-      total += product.price * item.quantity;
-    }
+    // Fetch product prices
+    const productIds = items.map((i) => i.product);
+    const products = await Product.find({ _id: { $in: productIds } });
+
+    // Calculate total price
+    let totalPrice = 0;
+    items.forEach((item) => {
+      const product = products.find((p) => p._id.toString() === item.product);
+      if (product) {
+        totalPrice += product.price * item.quantity;
+      }
+    });
 
     const order = new Order({
       customer: req.user.id,
       items,
-      notes,
-      totalPrice: total,
+      notes: notes || "",
+      totalPrice,
     });
 
     await order.save();
 
     res.status(201).json(order);
   } catch (err) {
-    res
-      .status(400)
-      .json({ message: "Error creating order", error: err.message });
+    console.error("ORDER CREATE ERROR:", err);
+    res.status(500).json({ message: "Error creating order" });
   }
 });
 
