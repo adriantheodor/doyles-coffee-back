@@ -104,4 +104,41 @@ router.delete(
   }
 );
 
+// COMPLETE order (admin)
+router.put("/:id/complete", authenticateToken, requireRole("admin"), async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id).populate("items.product");
+
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (order.status === "Fulfilled")
+      return res.status(400).json({ message: "Order is already fulfilled" });
+
+    // 1. Check stock availability
+    for (const item of order.items) {
+      if (item.product.stock < item.quantity) {
+        return res.status(400).json({
+          message: `Not enough stock for ${item.product.name}. In stock: ${item.product.stock}, needed: ${item.quantity}`,
+        });
+      }
+    }
+
+    // 2. Deduct stock
+    for (const item of order.items) {
+      item.product.stock -= item.quantity;
+      await item.product.save();
+    }
+
+    // 3. Update order status
+    order.status = "Fulfilled";
+    order.fulfilledAt = Date.now();
+    await order.save();
+
+    res.json({ message: "Order fulfilled and stock updated!", order });
+  } catch (err) {
+    console.error("Order Fulfill Error:", err);
+    res.status(500).json({ message: "Failed to complete order" });
+  }
+});
+
+
 module.exports = router;
