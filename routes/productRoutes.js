@@ -5,7 +5,7 @@ const Product = require("../models/Product");
 const { authenticateToken, requireRole } = require("../middleware/auth");
 
 // GET all products (public)
-router.get("/", authenticateToken, async (req, res) => {
+router.get("/", async (req, res) => {
   try {
     const products = await Product.find({ stock: { $gt: 0 } });
     res.json(products);
