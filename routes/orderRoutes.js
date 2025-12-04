@@ -2,6 +2,7 @@
 const express = require("express");
 const router = express.Router();
 const Order = require("../models/Order");
+const Product = require("../models/Product");
 const { authenticateToken, requireRole } = require("../middleware/auth");
 
 // CREATE new order (customer)
