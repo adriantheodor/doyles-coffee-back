@@ -59,9 +59,10 @@ router.get("/", authenticateToken, requireRole("admin"), async (req, res) => {
 // GET my orders (customer)
 router.get("/my", authenticateToken, async (req, res) => {
   try {
-    const orders = await Order.find({ user: req.user.id }).populate(
-      "products.product"
+    const orders = await Order.find({ customer: req.user.id }).populate(
+      "items.product"
     );
+
     res.json(orders);
   } catch (err) {
     res.status(500).json({ message: "Error fetching user orders" });
