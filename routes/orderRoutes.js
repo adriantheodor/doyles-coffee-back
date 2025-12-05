@@ -3,6 +3,7 @@ const express = require("express");
 const router = express.Router();
 const Order = require("../models/Order");
 const Product = require("../models/Product");
+const Invoice = require("../models/Invoice");
 const { authenticateToken, requireRole } = require("../middleware/auth");
 
 // CREATE new order (customer)
@@ -155,9 +156,11 @@ router.put(
 
       await invoice.save();
 
-      res.json({ message: "Order completed and invoice generated.", invoice });
-
-      res.json({ message: "Order completed", order });
+      return res.json({
+        message: "Order completed and invoice generated.",
+        order,
+        invoice,
+      });
     } catch (err) {
       console.error("Complete Order Error:", err);
       res.status(500).json({ message: "Server error" });
