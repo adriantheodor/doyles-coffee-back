@@ -58,11 +58,13 @@ app.use(express.json());
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/userRoutes");
 const invoiceRoutes = require("./routes/invoiceRoutes");
-const inventoryRoutes = require("./routes/inventoryRoutes");
 const productRoutes = require("./routes/productRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const issueReportRoutes = require("./routes/issueReportRoutes");
 const quoteRoutes = require("./routes/quoteRoutes");
+const invoiceRoutes = require("./routes/invoiceRoutes");
+
+
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
