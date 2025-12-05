@@ -49,9 +49,6 @@ app.use(
   })
 );
 
-
-
-
 app.use(express.json());
 
 // Routes
@@ -62,9 +59,7 @@ const productRoutes = require("./routes/productRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const issueReportRoutes = require("./routes/issueReportRoutes");
 const quoteRoutes = require("./routes/quoteRoutes");
-const invoiceRoutes = require("./routes/invoiceRoutes");
-
-
+const inventoryRoutes = require("./routes/inventoryRoutes");
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
