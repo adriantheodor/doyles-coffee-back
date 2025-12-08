@@ -55,37 +55,51 @@ router.post("/", authenticateToken, requireRole("admin"), async (req, res) => {
   }
 });
 
-router.get("/:id/pdf", authenticateToken, async (req, res) => {
+router.get("/:id/pdf", async (req, res) => {
   try {
+    const token = req.headers.authorization?.split(" ")[1] || null;
+    let user = null;
+
+    // If a token exists, decode it
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        user = { id: decoded.userId, role: decoded.role };
+      } catch (err) {
+        // Invalid token = treat as public but NOT authenticated
+      }
+    }
+
+    // Load invoice
     const invoice = await Invoice.findById(req.params.id)
       .populate({
         path: "order",
-        populate: {
-          path: "items.product",
-          model: "Product",
-        },
+        populate: { path: "items.product" },
       })
       .populate("customer", "name email");
 
-    if (!invoice) {
-      return res.status(404).json({ message: "Invoice not found" });
+    if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+
+    // Access control:
+    // Admins can view ALL invoices
+    // Customers can ONLY view their own invoices
+    if (user) {
+      if (
+        user.role !== "admin" &&
+        invoice.customer._id.toString() !== user.id
+      ) {
+        return res
+          .status(403)
+          .json({ message: "You are not authorized to view this invoice" });
+      }
     }
 
-    // ------------------------------------
-    // 🔐 AUTHORIZATION CHECK
-    // ------------------------------------
-    const isAdmin = req.user.role === "admin";
-    const isOwner = invoice.customer?._id.toString() === req.user.id;
-
-    if (!isAdmin && !isOwner) {
-      return res
-        .status(403)
-        .json({ message: "You are not authorized to view this invoice" });
+    // If NO TOKEN → only allow public if invoice belongs to nobody (optional)
+    if (!user) {
+      return res.status(401).json({ message: "Login required" });
     }
 
-    // ------------------------------------
-    // PDF HEADERS
-    // ------------------------------------
+    // Send PDF headers
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
@@ -95,27 +109,24 @@ router.get("/:id/pdf", authenticateToken, async (req, res) => {
     const doc = new PDFDocument();
     doc.pipe(res);
 
-    // -----------------------------
-    // Invoice Header
-    // -----------------------------
+    // HEADER
     doc
       .fontSize(24)
       .text("Doyle's Coffee & Break Room Services", { align: "center" });
-    doc.fontSize(16).text("INVOICE", { align: "center" }).moveDown(2);
+    doc.moveDown();
+    doc.fontSize(16).text("INVOICE", { align: "center" });
+    doc.moveDown(2);
 
-    // -----------------------------
-    // Customer & Invoice Details
-    // -----------------------------
-    doc.fontSize(12).text(`Invoice ID: ${invoice._id}`);
+    // CUSTOMER INFO
+    doc.fontSize(12);
+    doc.text(`Invoice ID: ${invoice._id}`);
     doc.text(`Order ID: ${invoice.order._id}`);
     doc.text(`Customer: ${invoice.customer.name}`);
     doc.text(`Email: ${invoice.customer.email}`);
     doc.text(`Date: ${new Date(invoice.createdAt).toLocaleDateString()}`);
     doc.moveDown();
 
-    // -----------------------------
-    // Items
-    // -----------------------------
+    // ITEMS
     doc.fontSize(14).text("Order Items:");
     doc.moveDown();
 
@@ -123,15 +134,13 @@ router.get("/:id/pdf", authenticateToken, async (req, res) => {
       doc
         .fontSize(12)
         .text(
-          `${item.product.name} — Qty: ${item.quantity} — $${item.product.price} each`
+          `${item.product.name} — Qty: ${item.quantity} — $${item.product.price}`
         );
     });
 
     doc.moveDown();
 
-    // -----------------------------
-    // Total Amount
-    // -----------------------------
+    // TOTAL
     doc.fontSize(14).text(`Total Amount: $${invoice.totalAmount}`);
 
     doc.end();
