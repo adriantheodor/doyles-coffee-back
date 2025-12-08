@@ -153,7 +153,7 @@ router.put(
       const invoice = new Invoice({
         order: order._id,
         customer: order.customer,
-        amount: order.totalPrice,
+        totalAmount: order.totalPrice,
         items: order.items.map((i) => ({
           product: i.product._id,
           quantity: i.quantity,
