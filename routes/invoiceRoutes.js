@@ -103,14 +103,15 @@ router.get("/:id/pdf", authenticateToken, async (req, res) => {
       doc
         .fontSize(12)
         .text(
-          `${item.product.name} — Qty: ${item.quantity} — $${item.product.price}`
+          `${item.product.name} — Qty: ${item.quantity} — $${item.product.price?.toFixed(2)}`
         );
     });
 
     doc.moveDown();
 
-    // TOTAL
-    doc.fontSize(14).text(`Total Amount: $${invoice.totalAmount}`);
+    doc
+      .fontSize(14)
+      .text(`Total Amount: $${invoice.totalAmount?.toFixed(2) || "0.00"}`);
 
     doc.end();
   } catch (err) {
