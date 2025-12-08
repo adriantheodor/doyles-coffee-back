@@ -55,23 +55,15 @@ router.post("/", authenticateToken, requireRole("admin"), async (req, res) => {
   }
 });
 
-router.get("/:id/pdf", async (req, res) => {
+router.get("/:id/pdf", authenticateToken, async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1] || null;
-
-    let user = null;
-
-    // Attempt to decode token if present
-    if (token) {
-      try {
-        user = jwt.verify(token, JWT_SECRET);
-      } catch {}
-    }
-
     const invoice = await Invoice.findById(req.params.id)
       .populate({
         path: "order",
-        populate: { path: "items.product", model: "Product" }
+        populate: {
+          path: "items.product",
+          model: "Product",
+        },
       })
       .populate("customer", "name email");
 
@@ -79,22 +71,21 @@ router.get("/:id/pdf", async (req, res) => {
       return res.status(404).json({ message: "Invoice not found" });
     }
 
-    // --------------------------
-    // ACCESS RULES:
-    // 1. Admins ALWAYS allowed
-    // 2. Customer allowed if they own the invoice
-    // --------------------------
-    if (
-      !user ||
-      (user.role !== "admin" &&
-        invoice.customer._id.toString() !== user.userId)
-    ) {
-      return res.status(403).json({
-        message: "You are not authorized to view this invoice"
-      });
+    // ------------------------------------
+    // 🔐 AUTHORIZATION CHECK
+    // ------------------------------------
+    const isAdmin = req.user.role === "admin";
+    const isOwner = invoice.customer?._id.toString() === req.user.id;
+
+    if (!isAdmin && !isOwner) {
+      return res
+        .status(403)
+        .json({ message: "You are not authorized to view this invoice" });
     }
 
-    // ---- PDF headers ----
+    // ------------------------------------
+    // PDF HEADERS
+    // ------------------------------------
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
@@ -104,29 +95,44 @@ router.get("/:id/pdf", async (req, res) => {
     const doc = new PDFDocument();
     doc.pipe(res);
 
-    // (PDF generation stays exactly the same)
-    doc.fontSize(24).text("Doyle's Coffee & Break Room Services", { align: "center" });
-    doc.moveDown();
+    // -----------------------------
+    // Invoice Header
+    // -----------------------------
+    doc
+      .fontSize(24)
+      .text("Doyle's Coffee & Break Room Services", { align: "center" });
+    doc.fontSize(16).text("INVOICE", { align: "center" }).moveDown(2);
 
-    doc.fontSize(16).text("INVOICE", { align: "center" });
-    doc.moveDown(2);
-
+    // -----------------------------
+    // Customer & Invoice Details
+    // -----------------------------
     doc.fontSize(12).text(`Invoice ID: ${invoice._id}`);
     doc.text(`Order ID: ${invoice.order._id}`);
     doc.text(`Customer: ${invoice.customer.name}`);
     doc.text(`Email: ${invoice.customer.email}`);
-    doc.text(`Date: ${invoice.createdAt.toLocaleDateString()}`);
+    doc.text(`Date: ${new Date(invoice.createdAt).toLocaleDateString()}`);
     doc.moveDown();
 
-    doc.fontSize(14).text("Items:");
+    // -----------------------------
+    // Items
+    // -----------------------------
+    doc.fontSize(14).text("Order Items:");
+    doc.moveDown();
+
     invoice.order.items.forEach((item) => {
-      doc.fontSize(12).text(
-        `${item.product.name} — Qty: ${item.quantity} — $${item.product.price}`
-      );
+      doc
+        .fontSize(12)
+        .text(
+          `${item.product.name} — Qty: ${item.quantity} — $${item.product.price} each`
+        );
     });
 
     doc.moveDown();
-    doc.fontSize(14).text(`Total: $${invoice.totalAmount}`);
+
+    // -----------------------------
+    // Total Amount
+    // -----------------------------
+    doc.fontSize(14).text(`Total Amount: $${invoice.totalAmount}`);
 
     doc.end();
   } catch (err) {
@@ -134,6 +140,5 @@ router.get("/:id/pdf", async (req, res) => {
     res.status(500).json({ message: "Failed to generate PDF" });
   }
 });
-
 
 module.exports = router;
