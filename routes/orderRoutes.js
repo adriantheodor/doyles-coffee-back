@@ -127,6 +127,13 @@ router.put(
       for (const item of order.items) {
         const product = item.product;
 
+        // SAFETY CHECK: Handle deleted products
+        if (!product) {
+          return res.status(400).json({
+            message: `Cannot fulfill order. Product with ID ${item.product} no longer exists in the database.`,
+          });
+        }
+
         if (product.stock < item.quantity) {
           return res.status(400).json({
             message: `Insufficient stock for ${product.name}`,
