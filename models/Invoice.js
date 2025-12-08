@@ -16,10 +16,6 @@ const invoiceSchema = new mongoose.Schema({
     type: String,  // optional PDF/IMG upload
     default: "",
   },
-  amount: {
-    type: Number,
-    required: true,
-  },
   notes: {
     type: String,
     default: "",
