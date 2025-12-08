@@ -55,22 +55,8 @@ router.post("/", authenticateToken, requireRole("admin"), async (req, res) => {
   }
 });
 
-router.get("/:id/pdf", async (req, res) => {
+router.get("/:id/pdf", authenticateToken, async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1] || null;
-    let user = null;
-
-    // If a token exists, decode it
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        user = { id: decoded.userId, role: decoded.role };
-      } catch (err) {
-        // Invalid token = treat as public but NOT authenticated
-      }
-    }
-
-    // Load invoice
     const invoice = await Invoice.findById(req.params.id)
       .populate({
         path: "order",
@@ -80,31 +66,14 @@ router.get("/:id/pdf", async (req, res) => {
 
     if (!invoice) return res.status(404).json({ message: "Invoice not found" });
 
-    // Access control:
-    // Admins can view ALL invoices
-    // Customers can ONLY view their own invoices
-    if (user) {
-      if (
-        user.role !== "admin" &&
-        invoice.customer._id.toString() !== user.id
-      ) {
-        return res
-          .status(403)
-          .json({ message: "You are not authorized to view this invoice" });
-      }
+    // USER CAN DOWNLOAD ONLY THEIR OWN INVOICE
+    // ADMINS CAN DOWNLOAD ALL
+    if (
+      req.user.role !== "admin" &&
+      invoice.customer._id.toString() !== req.user.id
+    ) {
+      return res.status(403).json({ message: "Not authorized" });
     }
-
-    // If NO TOKEN → only allow public if invoice belongs to nobody (optional)
-    if (!user) {
-      return res.status(401).json({ message: "Login required" });
-    }
-
-    // Send PDF headers
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename=invoice-${invoice._id}.pdf`
-    );
 
     const doc = new PDFDocument();
     doc.pipe(res);
