@@ -9,9 +9,9 @@ function authenticateToken(req, res, next) {
   jwt.verify(token, JWT_SECRET, (err, decoded) => {
     if (err) return res.status(403).json({ message: "Invalid or expired token" });
 
-    // Fix: match the key names used when creating the token
+    
     req.user = {
-      id: decoded.userId,  // not decoded.id
+      id: decoded.userId,  
       role: decoded.role,
     };
 

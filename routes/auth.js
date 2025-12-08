@@ -12,7 +12,7 @@ const changePassword = async (req, res) => {
     const { currentPassword, newPassword } = req.body;
 
     // Get user from token
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user.userId); 
     if (!user) return res.status(404).json({ message: "User not found" });
 
     // Check current password
