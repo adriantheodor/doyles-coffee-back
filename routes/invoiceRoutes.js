@@ -14,8 +14,8 @@ router.get("/", authenticateToken, requireRole("admin"), async (req, res) => {
       .populate("customer", "name email");
     res.json(invoices);
   } catch (err) {
-    console.error("Invoice fetch error:", err);
-    res.status(500).json({ message: "Failed to load invoices" });
+    console.error("Invoice Fetch Error:", err);
+    res.status(500).json({ message: "Failed to fetch invoices" });
   }
 });
 
@@ -55,8 +55,26 @@ router.post("/", authenticateToken, requireRole("admin"), async (req, res) => {
   }
 });
 
-router.get("/:id/pdf", authenticateToken, async (req, res) => {
+// PDF download — PUBLIC ROUTE but with access control
+router.get("/:id/pdf", async (req, res) => {
   try {
+    const token = req.headers.authorization
+      ? req.headers.authorization.split(" ")[1]
+      : null;
+
+    let requester = null;
+
+    // Try decoding token (if provided)
+    if (token) {
+      try {
+        requester = jwt.verify(token, JWT_SECRET);
+      } catch (err) {
+        // Invalid token should not block public access but also doesn't give customer access
+        requester = null;
+      }
+    }
+
+    // Fetch invoice + related data
     const invoice = await Invoice.findById(req.params.id)
       .populate({
         path: "order",
@@ -65,11 +83,26 @@ router.get("/:id/pdf", authenticateToken, async (req, res) => {
           model: "Product",
         },
       })
-      .populate("customer", "name email");
+      .populate("customer", "name email role");
 
-    if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+    if (!invoice) {
+      return res.status(404).json({ message: "Invoice not found" });
+    }
 
-    // PDF metadata
+    // -----------------------------
+    // ACCESS CONTROL LOGIC (Option A)
+    // -----------------------------
+
+    const isAdmin = requester?.role === "admin";
+    const isOwner = requester?.userId === invoice.customer._id.toString();
+
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({ message: "Forbidden: Not your invoice" });
+    }
+
+    // -----------------------------
+    // PDF Generation
+    // -----------------------------
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
@@ -79,27 +112,23 @@ router.get("/:id/pdf", authenticateToken, async (req, res) => {
     const doc = new PDFDocument();
     doc.pipe(res);
 
-    // -----------------------------
-    // Invoice Header
-    //------------------------------
-    doc.fontSize(24).text("Doyle's Coffee & Break Room Services", { align: "center" });
+    // Header
+    doc
+      .fontSize(22)
+      .text("Doyle's Coffee & Break Room Services", { align: "center" });
     doc.moveDown();
     doc.fontSize(16).text("INVOICE", { align: "center" });
     doc.moveDown(2);
 
-    // -----------------------------
-    // Customer & Invoice Details
-    //------------------------------
+    // Details
     doc.fontSize(12).text(`Invoice ID: ${invoice._id}`);
     doc.text(`Order ID: ${invoice.order._id}`);
     doc.text(`Customer: ${invoice.customer.name}`);
-    doc.text(`Customer Email: ${invoice.customer.email}`);
+    doc.text(`Email: ${invoice.customer.email}`);
     doc.text(`Date: ${new Date(invoice.createdAt).toLocaleDateString()}`);
     doc.moveDown();
 
-    // -----------------------------
-    // Order Items Table
-    //------------------------------
+    // Items
     doc.fontSize(14).text("Order Items:");
     doc.moveDown();
 
@@ -107,23 +136,19 @@ router.get("/:id/pdf", authenticateToken, async (req, res) => {
       doc
         .fontSize(12)
         .text(
-          `${item.product.name}  — Qty: ${item.quantity} — $${item.product.price} each`
+          `${item.product.name} — Qty: ${item.quantity} — $${item.product.price} each`
         );
     });
 
     doc.moveDown();
 
-    // -----------------------------
     // Total
-    //------------------------------
-    doc.fontSize(14).text(`Total Amount: $${invoice.totalAmount}`);
-    doc.moveDown();
+    doc.fontSize(16).text(`Total Amount: $${invoice.totalAmount}`);
 
-    // End and send PDF
     doc.end();
   } catch (err) {
     console.error("PDF ERROR:", err);
-    res.status(500).json({ message: "Failed to generate PDF" });
+    return res.status(500).json({ message: "Failed to generate PDF" });
   }
 });
 
