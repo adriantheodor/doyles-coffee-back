@@ -28,7 +28,7 @@ router.post("/", authenticateToken, async (req, res) => {
 // GET all issues (admin)
 router.get("/", authenticateToken, requireRole("admin"), async (req, res) => {
   try {
-    const issues = await IssueReport.find().populate("customer");
+    const issues = await IssueReport.find().populate("customer", "name email");
     res.json(issues);
   } catch (err) {
     res.status(500).json({ message: "Error fetching issues" });
