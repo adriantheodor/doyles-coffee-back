@@ -127,12 +127,12 @@ router.post("/refresh", async (req, res) => {
     doc.expiresAt = newExpiresAt;
     await doc.save();
 
-    // Set new cookie
-    res.cookie("refreshToken", newRefreshString, {
+    res.cookie("refreshToken", refreshString, {
       httpOnly: true,
       secure: true,
       sameSite: "none",
-      expires: newExpiresAt,
+      domain: "doyles-coffee-back.onrender.com",
+      expires: expiresAt,
     });
 
     // Issue NEW access token
@@ -177,6 +177,7 @@ router.post("/login", async (req, res) => {
       httpOnly: true,
       secure: true,
       sameSite: "none",
+      domain: "doyles-coffee-back.onrender.com",
       expires: expiresAt,
     });
 
