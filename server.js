@@ -30,16 +30,39 @@ app.use(helmet());
 
 const allowedOrigins = [
   "http://localhost:3000",
-  "https://doyles-coffee-front.vercel.app",        // if you used the Vercel-generated domain
-  "https://www.doylesbreakroomservices.com"        // your custom domain
+  "https://doyles-coffee-front.vercel.app",
+  "https://www.doylesbreakroomservices.com"
 ];
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: function (origin, callback) {
+      // Allow non-browser requests (like Postman)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.log("❌ CORS blocked:", origin);
+      return callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
+
+    // Required for Safari/Chrome cross-site cookies
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Cookie",
+    ],
+    exposedHeaders: [
+      "Set-Cookie",
+    ],
+
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   })
 );
+
 
 app.use(express.json());
 app.use(cookieParser());
