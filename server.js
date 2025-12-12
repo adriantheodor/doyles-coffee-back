@@ -4,6 +4,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const helmet = require("helmet");
+const cookieParser = require("cookie-parser");
 
 // ✅ Force dotenv to load from the same folder as this file
 dotenv.config({ path: path.resolve(__dirname, '.env') });
@@ -50,6 +51,7 @@ app.use(
 );
 
 app.use(express.json());
+app.use(cookieParser());
 
 // Routes
 const authRoutes = require("./routes/auth");

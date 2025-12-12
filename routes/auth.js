@@ -4,7 +4,26 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const router = express.Router();
 const User = require("../models/User");
+const RefreshToken = require("../models/RefreshToken");
 const { authenticateToken } = require("../middleware/auth");
+
+// Configurable lifetimes
+const ACCESS_TOKEN_EXPIRES = process.env.ACCESS_TOKEN_EXPIRES || "20m"; // 10-30m recommended
+const REFRESH_TOKEN_DAYS = parseInt(process.env.REFRESH_TOKEN_DAYS || "14", 10); // 7-30 days
+
+function createAccessToken(user) {
+  return jwt.sign(
+    { userId: user._id.toString(), role: user.role },
+    JWT_SECRET,
+    { expiresIn: ACCESS_TOKEN_EXPIRES }
+  );
+}
+
+function createRefreshTokenString() {
+  // random string (not JWT) to store server-side (you can also use JWT)
+  return crypto.randomBytes(64).toString("hex");
+}
+
 
 // Define the changePassword handler here
 const changePassword = async (req, res) => {
@@ -62,23 +81,115 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Login
-router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ message: 'Missing fields' });
+// Refresh endpoint: exchanges a valid refresh cookie for a new access token (optionally rotate refresh)
+router.post("/refresh", async (req, res) => {
+  try {
+    const refreshString = req.cookies?.refreshToken;
+    if (!refreshString) return res.status(401).json({ message: "No refresh token" });
 
+    const doc = await RefreshToken.findOne({ token: refreshString }).populate("user");
+    if (!doc) return res.status(403).json({ message: "Invalid refresh token" });
+
+    if (new Date() > doc.expiresAt) {
+      await doc.deleteOne();
+      return res.status(403).json({ message: "Refresh token expired" });
+    }
+
+    const user = doc.user;
+    if (!user) {
+      await doc.deleteOne();
+      return res.status(403).json({ message: "Invalid token" });
+    }
+
+    // optionally rotate refresh token: generate new token and replace DB & cookie
+    const newRefreshString = createRefreshTokenString();
+    const newExpiresAt = new Date();
+    newExpiresAt.setDate(newExpiresAt.getDate() + REFRESH_TOKEN_DAYS);
+
+    doc.token = newRefreshString;
+    doc.expiresAt = newExpiresAt;
+    await doc.save();
+
+    // set new cookie
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "none",
+      expires: newExpiresAt
+    };
+    res.cookie("refreshToken", newRefreshString, cookieOptions);
+
+    // issue new access token
+    const accessToken = createAccessToken(user);
+
+    res.json({ token: accessToken });
+  } catch (err) {
+    console.error("REFRESH ERR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Login: returns access token, sets refresh cookie
+router.post("/login", async (req, res) => {
+  const { email, password } = req.body;
   try {
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: 'Invalid credentials' });
+    if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
-    const ok = await bcrypt.compare(password, user.password);
-    if (!ok) return res.status(400).json({ message: 'Invalid credentials' });
+    // TODO: replace with your password check (bcrypt)
+    const passwordMatches = await user.comparePassword
+      ? await user.comparePassword(password)
+      : user.password === password;
 
-    const token = jwt.sign({ userId: user._id, role: user.role }, JWT_SECRET, { expiresIn: '1h' });
-    res.json({ token, user: { id: user._id, name: user.name, role: user.role } });
+    if (!passwordMatches) return res.status(401).json({ message: "Invalid credentials" });
+
+    const accessToken = createAccessToken(user);
+    const refreshString = createRefreshTokenString();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_DAYS);
+
+    const refreshDoc = new RefreshToken({
+      token: refreshString,
+      user: user._id,
+      expiresAt
+    });
+    await refreshDoc.save();
+
+    // Set HttpOnly cookie for refresh token
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "none", // if your frontend is on different domain (Vercel) — set to 'none' and use secure
+      expires: expiresAt
+    };
+
+    res.cookie("refreshToken", refreshString, cookieOptions);
+
+    // Return access token and user profile
+    res.json({ token: accessToken, user: { name: user.name, email: user.email, role: user.role, id: user._id } });
   } catch (err) {
-    console.error('Login error:', err);
-    res.status(500).json({ message: 'Server error during login' });
+    console.error("LOGIN ERR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+// Logout: remove refresh token cookie & DB entry (optional)
+router.post("/logout", async (req, res) => {
+  try {
+    const refreshString = req.cookies?.refreshToken;
+    if (refreshString) {
+      await RefreshToken.deleteOne({ token: refreshString });
+    }
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "none"
+    });
+    res.json({ message: "Logged out" });
+  } catch (err) {
+    console.error("LOGOUT ERR:", err);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
