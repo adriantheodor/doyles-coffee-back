@@ -2,7 +2,7 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const crypto = require("crypto"); // ✅ REQUIRED
+const crypto = require("crypto");
 const router = express.Router();
 
 const User = require("../models/User");
@@ -127,12 +127,13 @@ router.post("/refresh", async (req, res) => {
     doc.expiresAt = newExpiresAt;
     await doc.save();
 
+    // ✅ FIXED: Used 'newRefreshString' and 'newExpiresAt'
     res.cookie("refreshToken", newRefreshString, {
       httpOnly: true,
-      secure: true, // REQUIRED for SameSite=None
+      secure: true,
       sameSite: "none",
       domain: ".doylesbreakroomservices.com",
-      expires: expiresAt,
+      expires: newExpiresAt,
     });
 
     // Issue NEW access token
@@ -172,12 +173,12 @@ router.post("/login", async (req, res) => {
       expiresAt,
     }).save();
 
-    // Set HttpOnly refresh cookie
-    res.cookie("refreshToken", refreshToken, {
+    // ✅ FIXED: Used 'refreshString' instead of 'refreshToken'
+    res.cookie("refreshToken", refreshString, {
       httpOnly: true,
-      secure: true, 
+      secure: true,
       sameSite: "none",
-      domain: ".doylesbreakroomservices.com", 
+      domain: ".doylesbreakroomservices.com",
       expires: expiresAt,
     });
 
@@ -211,6 +212,7 @@ router.post("/logout", async (req, res) => {
       httpOnly: true,
       secure: true,
       sameSite: "none",
+      domain: ".doylesbreakroomservices.com", // Added domain to ensure clear works
     });
 
     res.json({ message: "Logged out" });
