@@ -7,10 +7,13 @@ const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
 
 // ✅ Force dotenv to load from the same folder as this file
-dotenv.config({ path: path.resolve(__dirname, '.env') });
+dotenv.config({ path: path.resolve(__dirname, ".env") });
 
-console.log('🔍 .env path:', path.resolve(__dirname, '.env'));
-console.log('🔍 JWT_SECRET:', process.env.JWT_SECRET ? 'Loaded ✅' : 'Not found ❌');
+console.log("🔍 .env path:", path.resolve(__dirname, ".env"));
+console.log(
+  "🔍 JWT_SECRET:",
+  process.env.JWT_SECRET ? "Loaded ✅" : "Not found ❌"
+);
 
 // ✅ Sanity checks for critical environment variables
 if (!process.env.JWT_SECRET) {
@@ -27,42 +30,26 @@ const PORT = process.env.PORT || 4000;
 
 app.use(helmet());
 
-
 const allowedOrigins = [
+  "https://www.doylesbreakroomservices.com",
+  "https://doylesbreakroomservices.com",
+  "https://api.doylesbreakroomservices.com",
   "http://localhost:3000",
-  "https://doyles-coffee-front.vercel.app",
-  "https://www.doylesbreakroomservices.com"
 ];
 
 app.use(
   cors({
-    origin: function (origin, callback) {
-      // Allow non-browser requests (like Postman)
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
+    origin: (origin, cb) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        cb(null, true);
+      } else {
+        console.log("CORS blocked:", origin);
+        cb(new Error("Not allowed by CORS"));
       }
-
-      console.log("❌ CORS blocked:", origin);
-      return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
-
-    // Required for Safari/Chrome cross-site cookies
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "Cookie",
-    ],
-    exposedHeaders: [
-      "Set-Cookie",
-    ],
-
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   })
 );
-
 
 app.use(express.json());
 app.use(cookieParser());

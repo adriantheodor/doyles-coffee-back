@@ -127,11 +127,11 @@ router.post("/refresh", async (req, res) => {
     doc.expiresAt = newExpiresAt;
     await doc.save();
 
-    res.cookie("refreshToken", refreshString, {
+    res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: true,
+      secure: true, // REQUIRED for SameSite=None
       sameSite: "none",
-      domain: "doyles-coffee-back.onrender.com",
+      domain: ".doylesbreakroomservices.com",
       expires: expiresAt,
     });
 
@@ -173,11 +173,11 @@ router.post("/login", async (req, res) => {
     }).save();
 
     // Set HttpOnly refresh cookie
-    res.cookie("refreshToken", refreshString, {
+    res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: true,
+      secure: true, 
       sameSite: "none",
-      domain: "doyles-coffee-back.onrender.com",
+      domain: ".doylesbreakroomservices.com", 
       expires: expiresAt,
     });
 
