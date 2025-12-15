@@ -127,7 +127,7 @@ router.post("/refresh", async (req, res) => {
     doc.expiresAt = newExpiresAt;
     await doc.save();
 
-    res.cookie("refreshToken", refreshToken, {
+    res.cookie("refreshToken", newRefreshString, {
       httpOnly: true,
       secure: true, // REQUIRED for SameSite=None
       sameSite: "none",
