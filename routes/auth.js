@@ -62,10 +62,13 @@ const changePassword = async (req, res) => {
 };
 
 // =========================
-// 👤 REGISTER
+// 👤 REGISTER (Public)
 // =========================
+
 router.post("/register", async (req, res) => {
-  const { name, email, password, role = "customer" } = req.body;
+  // 1. Remove 'role' from the destructuring so we ignore user input
+  const { name, email, password } = req.body;
+
   if (!name || !email || !password)
     return res.status(400).json({ message: "Missing fields" });
 
@@ -77,7 +80,14 @@ router.post("/register", async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(password, salt);
 
-    const newUser = new User({ name, email, password: hash, role });
+    // 2. HARDCODE role: 'customer' here
+    const newUser = new User({
+      name,
+      email,
+      password: hash,
+      role: "customer", // 🔒 Security Fix: Always force customer
+    });
+
     await newUser.save();
 
     const token = createAccessToken(newUser);
@@ -91,6 +101,42 @@ router.post("/register", async (req, res) => {
     res.status(500).json({ message: "Server error during registration" });
   }
 });
+
+router.post(
+  "/create-admin",
+  authenticateToken,
+  requireRole("admin"),
+  async (req, res) => {
+    const { name, email, password } = req.body;
+
+    if (!name || !email || !password)
+      return res.status(400).json({ message: "Missing fields" });
+
+    try {
+      const existingUser = await User.findOne({ email });
+      if (existingUser)
+        return res.status(400).json({ message: "User already exists" });
+
+      const salt = await bcrypt.genSalt(10);
+      const hash = await bcrypt.hash(password, salt);
+
+      // Because this route is protected by requireRole("admin"),
+      // it is safe to create an admin here.
+      const newAdmin = new User({
+        name,
+        email,
+        password: hash,
+        role: "admin",
+      });
+
+      await newAdmin.save();
+      res.status(201).json({ message: "New Admin created successfully" });
+    } catch (err) {
+      console.error("ADMIN CREATION ERROR:", err);
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+);
 
 // =========================
 // 🔄 REFRESH ACCESS TOKEN
