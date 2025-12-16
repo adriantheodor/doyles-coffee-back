@@ -7,7 +7,7 @@ const router = express.Router();
 
 const User = require("../models/User");
 const RefreshToken = require("../models/RefreshToken");
-const { authenticateToken } = require("../middleware/auth");
+const { authenticateToken, requireRole} = require("../middleware/auth");
 
 // =========================
 // 🔐 ENV + SECURITY SECTION
