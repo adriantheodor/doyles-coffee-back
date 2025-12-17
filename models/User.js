@@ -1,5 +1,5 @@
 // server/models/User.js
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema({
   name: {
@@ -17,13 +17,15 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['admin', 'customer'],
-    default: 'customer',
+    enum: ["admin", "customer"],
+    default: "customer",
   },
   createdAt: {
     type: Date,
     default: Date.now,
   },
+  isVerified: { type: Boolean, default: false },
+  verificationToken: { type: String },
 });
 
-module.exports = mongoose.models.User || mongoose.model('User', userSchema);
+module.exports = mongoose.models.User || mongoose.model("User", userSchema);

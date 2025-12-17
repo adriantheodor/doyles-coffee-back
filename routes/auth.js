@@ -4,10 +4,10 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const router = express.Router();
-
+const { sendVerificationEmail } = require("../utils/sendEmail");
 const User = require("../models/User");
 const RefreshToken = require("../models/RefreshToken");
-const { authenticateToken, requireRole} = require("../middleware/auth");
+const { authenticateToken, requireRole } = require("../middleware/auth");
 
 // =========================
 // 🔐 ENV + SECURITY SECTION
@@ -90,11 +90,17 @@ router.post("/register", async (req, res) => {
 
     await newUser.save();
 
-    const token = createAccessToken(newUser);
+    try {
+      await sendVerificationEmail(newUser, verificationToken);
+    } catch (emailError) {
+      console.error("Email sending failed:", emailError);
+      // Optional: You might want to delete the user if email fails,
+      // or just tell the frontend "Account created but email failed."
+    }
 
     res.status(201).json({
-      token,
-      user: { id: newUser._id, name: newUser.name, role: newUser.role },
+      message:
+        "Registration successful. Please check your email to verify your account.",
     });
   } catch (err) {
     console.error("REGISTRATION ERROR:", err);
@@ -193,6 +199,33 @@ router.post("/refresh", async (req, res) => {
 });
 
 // =========================
+// 📬 VERIFY EMAIL (New Route)
+// =========================
+router.post("/verify-email", async (req, res) => {
+  const { token } = req.body; // Frontend sends this from the URL query param
+
+  if (!token) return res.status(400).json({ message: "No token provided" });
+
+  try {
+    const user = await User.findOne({ verificationToken: token });
+
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired token" });
+    }
+
+    // Verify the user
+    user.isVerified = true;
+    user.verificationToken = undefined; // Clear the token so it can't be reused
+    await user.save();
+
+    res.json({ message: "Email verified successfully! You can now log in." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// =========================
 // 🔐 LOGIN
 // =========================
 router.post("/login", async (req, res) => {
@@ -204,6 +237,13 @@ router.post("/login", async (req, res) => {
     const passwordMatches = await bcrypt.compare(password, user.password);
     if (!passwordMatches)
       return res.status(401).json({ message: "Invalid credentials" });
+
+    if (!user.isVerified) {
+      return res.status(403).json({
+        message: "Please verify your email address before logging in.",
+        isUnverified: true,
+      });
+    }
 
     // Access token
     const accessToken = createAccessToken(user);
