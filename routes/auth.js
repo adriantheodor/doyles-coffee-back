@@ -85,7 +85,9 @@ router.post("/register", async (req, res) => {
       name,
       email,
       password: hash,
-      role: "customer", // 🔒 Security Fix: Always force customer
+      role: "customer", 
+      isVerified: false, 
+      verificationToken: verificationToken,
     });
 
     await newUser.save();
