@@ -5,22 +5,15 @@ const nodemailer = require("nodemailer");
 const { authenticateToken, requireRole } = require("../middleware/auth");
 const { sendEmail, generateICS } = require("../utils/sendEmail");
 
-let transporter = null;
-if (MAIL_HOST && MAIL_PORT && MAIL_USER && MAIL_PASS) {
-  transporter = nodemailer.createTransport({
-    host: "smtp-relay.brevo.com",
-    port: 587,
-    secure: false,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
-} else {
-  console.warn(
-    "⚠️ SMTP not configured. Emails will not be sent. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS in .env"
-  );
-}
+const transporter = nodemailer.createTransport({
+  host: "smtp-relay.brevo.com",
+  port: 587,
+  secure: false, // true for 465, false for other ports
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
 
 // Create a new quote request
 router.post("/", async (req, res) => {
