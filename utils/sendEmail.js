@@ -1,13 +1,13 @@
 const nodemailer = require("nodemailer");
 
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp-relay.brevo.com",
+  port: 587,
+  secure: false, // true for 465, false for other ports
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
-  logger: true, // <— prints detailed SMTP info
-  debug: true, // <— prints message envelope + body
 });
 
 /**
@@ -138,7 +138,7 @@ async function sendEmail({ to, subject, html, ics }) {
 
 const sendVerificationEmail = async (user, token) => {
   // Make sure to add CLIENT_URL to your .env (e.g., http://localhost:5173)
-  const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
+  const clientUrl = process.env.CORS_ORIGIN || "http://localhost:3000";
   
   // This points to the Frontend route
   const verifyUrl = `${clientUrl}/verify-email?token=${token}`;
