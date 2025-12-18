@@ -5,20 +5,15 @@ const nodemailer = require("nodemailer");
 const { authenticateToken, requireRole } = require("../middleware/auth");
 const { sendEmail, generateICS } = require("../utils/sendEmail");
 
-const MAIL_HOST = process.env.SMTP_HOST;
-const MAIL_PORT = process.env.SMTP_PORT;
-const MAIL_USER = process.env.SMTP_USER;
-const MAIL_PASS = process.env.SMTP_PASS;
-
 let transporter = null;
 if (MAIL_HOST && MAIL_PORT && MAIL_USER && MAIL_PASS) {
   transporter = nodemailer.createTransport({
-    host: MAIL_HOST,
-    port: Number(MAIL_PORT),
-    secure: Number(MAIL_PORT) === 465,
+    host: "smtp-relay.brevo.com",
+    port: 587,
+    secure: false,
     auth: {
-      user: MAIL_USER,
-      pass: MAIL_PASS,
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
     },
   });
 } else {
