@@ -80,6 +80,8 @@ router.post("/register", async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(password, salt);
 
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+
     // 2. HARDCODE role: 'customer' here
     const newUser = new User({
       name,
