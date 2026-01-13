@@ -298,6 +298,9 @@ router.post("/logout", async (req, res) => {
       await RefreshToken.deleteOne({ token: refreshString });
     }
 
+    await RefreshToken.deleteMany({ user: user._id });
+
+
     res.clearCookie("refreshToken", {
       httpOnly: true,
       secure: true,
