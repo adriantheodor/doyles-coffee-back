@@ -28,7 +28,27 @@ router.get("/:id", async (req, res) => {
 // CREATE new product (admin only)
 router.post("/", authenticateToken, requireRole("admin"), async (req, res) => {
   try {
-    const product = new Product(req.body);
+    const { name, price, stock, description } = req.body;
+
+    // Validation
+    if (!name || typeof name !== "string" || name.trim().length === 0) {
+      return res.status(400).json({ message: "Name is required and must be a non-empty string" });
+    }
+
+    if (price === undefined || typeof price !== "number" || price < 0) {
+      return res.status(400).json({ message: "Price is required and must be a non-negative number" });
+    }
+
+    if (stock !== undefined && (typeof stock !== "number" || stock < 0)) {
+      return res.status(400).json({ message: "Stock must be a non-negative number" });
+    }
+
+    const product = new Product({
+      name: name.trim(),
+      price,
+      stock: stock || 0,
+      description: description || "",
+    });
     await product.save();
     res.status(201).json(product);
   } catch (err) {
@@ -45,7 +65,40 @@ router.put(
   requireRole("admin"),
   async (req, res) => {
     try {
-      const updated = await Product.findByIdAndUpdate(req.params.id, req.body, {
+      const { name, price, stock, description } = req.body;
+      const updateData = {};
+
+      // Validate and add to update object only if provided
+      if (name !== undefined) {
+        if (typeof name !== "string" || name.trim().length === 0) {
+          return res.status(400).json({ message: "Name must be a non-empty string" });
+        }
+        updateData.name = name.trim();
+      }
+
+      if (price !== undefined) {
+        if (typeof price !== "number" || price < 0) {
+          return res.status(400).json({ message: "Price must be a non-negative number" });
+        }
+        updateData.price = price;
+      }
+
+      if (stock !== undefined) {
+        if (typeof stock !== "number" || stock < 0) {
+          return res.status(400).json({ message: "Stock must be a non-negative number" });
+        }
+        updateData.stock = stock;
+      }
+
+      if (description !== undefined) {
+        updateData.description = description || "";
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ message: "No valid fields provided for update" });
+      }
+
+      const updated = await Product.findByIdAndUpdate(req.params.id, updateData, {
         new: true,
       });
       if (!updated)

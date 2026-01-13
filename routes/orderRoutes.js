@@ -123,51 +123,84 @@ router.put(
         return res.status(400).json({ message: "Order already completed" });
       }
 
-      // Deduct stock
-      for (const item of order.items) {
-        const product = item.product;
+      // Atomically deduct stock using MongoDB transactions
+      const session = await Order.startSession();
+      session.startTransaction();
 
-        // SAFETY CHECK: Handle deleted products
-        if (!product) {
-          return res.status(400).json({
-            message: `Cannot fulfill order. Product with ID ${item.product} no longer exists in the database.`,
-          });
+      try {
+        // Verify all products exist and have sufficient stock
+        for (const item of order.items) {
+          const product = item.product;
+
+          // SAFETY CHECK: Handle deleted products
+          if (!product) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(400).json({
+              message: `Cannot fulfill order. Product with ID ${item.product} no longer exists in the database.`,
+            });
+          }
+
+          if (product.stock < item.quantity) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(400).json({
+              message: `Insufficient stock for ${product.name}`,
+            });
+          }
         }
 
-        if (product.stock < item.quantity) {
-          return res.status(400).json({
-            message: `Insufficient stock for ${product.name}`,
-          });
+        // Atomically deduct stock from all products using $inc operator
+        for (const item of order.items) {
+          const updated = await Product.findByIdAndUpdate(
+            item.product._id,
+            { $inc: { stock: -item.quantity } },
+            { new: true, session }
+          );
+
+          // Double-check stock didn't go negative (safety check)
+          if (updated.stock < 0) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(400).json({
+              message: `Stock allocation failed for ${item.product.name}. Insufficient inventory.`,
+            });
+          }
         }
 
-        product.stock -= item.quantity;
-        await product.save();
+        // Update order status
+        order.status = "Fulfilled";
+        order.fulfilledAt = new Date();
+        await order.save({ session });
+
+        // Create invoice
+        const invoice = new Invoice({
+          order: order._id,
+          customer: order.customer,
+          totalAmount: order.totalPrice,
+          items: order.items.map((i) => ({
+            product: i.product._id,
+            quantity: i.quantity,
+            price: i.product.price,
+          })),
+        });
+
+        await invoice.save({ session });
+
+        // Commit transaction
+        await session.commitTransaction();
+        session.endSession();
+
+        return res.json({
+          message: "Order completed and invoice generated.",
+          order,
+          invoice,
+        });
+      } catch (transactionError) {
+        await session.abortTransaction();
+        session.endSession();
+        throw transactionError;
       }
-
-      // Update order
-      order.status = "Fulfilled";
-      order.fulfilledAt = new Date();
-      await order.save();
-
-      // Create invoice
-      const invoice = new Invoice({
-        order: order._id,
-        customer: order.customer,
-        totalAmount: order.totalPrice,
-        items: order.items.map((i) => ({
-          product: i.product._id,
-          quantity: i.quantity,
-          price: i.product.price,
-        })),
-      });
-
-      await invoice.save();
-
-      return res.json({
-        message: "Order completed and invoice generated.",
-        order,
-        invoice,
-      });
     } catch (err) {
       console.error("Complete Order Error:", err);
       res.status(500).json({ message: "Server error" });

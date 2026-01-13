@@ -1,32 +1,31 @@
 const express = require("express");
 const router = express.Router();
 const QuoteRequest = require("../models/QuoteRequest");
-const nodemailer = require("nodemailer");
 const { authenticateToken, requireRole } = require("../middleware/auth");
 const { sendEmail, generateICS } = require("../utils/sendEmail");
-
-const transporter = nodemailer.createTransport({
-  host: "smtp-relay.brevo.com",
-  port: 587,
-  secure: false, // true for 465, false for other ports
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
 
 // Create a new quote request
 router.post("/", async (req, res) => {
   try {
     const qr = await QuoteRequest.create(req.body);
 
-    if (transporter) {
-      await transporter.sendMail({
-        from: '"Doyle’s Portal" <no-reply@doyles.com>',
+    // Send admin notification email
+    try {
+      await sendEmail({
         to: process.env.ADMIN_EMAIL || "admin@doyles.com",
         subject: "New Quote Request",
-        text: `New lead from ${qr.contactName} at ${qr.companyName} (${qr.email})`,
+        html: `
+          <div style="font-family: Arial, sans-serif; padding: 20px;">
+            <h2>New Quote Request</h2>
+            <p><strong>Contact Name:</strong> ${qr.contactName}</p>
+            <p><strong>Company Name:</strong> ${qr.companyName}</p>
+            <p><strong>Email:</strong> ${qr.email}</p>
+          </div>
+        `,
       });
+    } catch (emailError) {
+      console.error("Failed to send admin notification:", emailError);
+      // Don't fail the request if email fails
     }
 
     res.status(201).json({ id: qr._id });
@@ -71,22 +70,28 @@ router.put(
       });
 
       // Send scheduling email (no meeting link)
-      if (status === "scheduled" && transporter) {
-        await transporter.sendMail({
-          from: '"Doyle’s Portal" <no-reply@doyles.com>',
-          to: qr.email,
-          subject: "Your Quote Consultation Has Been Scheduled",
-          text: `Hi ${qr.contactName},
+      if (status === "scheduled" && scheduledDate) {
+        try {
+          const html = `
+            <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+              <h2 style="color: #7a4b25;">Your Quote Consultation Has Been Scheduled</h2>
+              <p>Hi ${qr.contactName},</p>
+              <p>Your quote consultation with Doyle's Coffee has been scheduled for:</p>
+              <p style="font-size: 16px; font-weight: bold;">${new Date(scheduledDate).toLocaleString()}</p>
+              ${adminNotes ? `<p><strong>Notes:</strong> ${adminNotes}</p>` : ""}
+              <p>Thank you,<br>Doyle's Coffee Team</p>
+            </div>
+          `;
 
-Your quote consultation with Doyle's Coffee has been scheduled for ${new Date(
-            scheduledDate
-          ).toLocaleString()}.
-
-Notes: ${adminNotes || "—"}
-
-Thank you,
-Doyle’s Coffee Team`,
-        });
+          await sendEmail({
+            to: qr.email,
+            subject: "Your Quote Consultation Has Been Scheduled",
+            html,
+          });
+        } catch (emailError) {
+          console.error("Failed to send scheduling email:", emailError);
+          // Don't fail the request if email fails
+        }
       }
 
       res.json(qr);
@@ -196,23 +201,8 @@ router.put(
 );
 
 router.get("/test-email", async (req, res) => {
-  try {
-    if (!transporter) {
-      return res.status(500).json({ message: "No transporter configured." });
-    }
-
-    await transporter.sendMail({
-      from: '"Doyle’s Portal" <no-reply@doyles.com>',
-      to: process.env.ADMIN_EMAIL,
-      subject: "Test Email from Doyle’s Portal",
-      text: "If you received this, your SMTP setup is working!",
-    });
-
-    res.json({ message: "Test email sent successfully!" });
-  } catch (err) {
-    console.error("Email test failed:", err);
-    res.status(500).json({ message: "Email test failed", error: err.message });
-  }
+  // Test endpoint removed - use centralized sendEmail utility
+  res.status(200).json({ message: "Sendmail utility is configured and ready to use." });
 });
 
 // Mark a quote as completed

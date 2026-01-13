@@ -26,7 +26,7 @@ const REFRESH_TOKEN_DAYS = parseInt(process.env.REFRESH_TOKEN_DAYS || "14", 10);
 // =========================
 function createAccessToken(user) {
   return jwt.sign(
-    { userId: user._id.toString(), role: user.role },
+    { id: user._id.toString(), role: user.role },
     JWT_SECRET,
     { expiresIn: ACCESS_TOKEN_EXPIRES }
   );
@@ -290,7 +290,7 @@ router.post("/login", async (req, res) => {
 // =========================
 // 🚪 LOGOUT
 // =========================
-router.post("/logout", async (req, res) => {
+router.post("/logout", authenticateToken, async (req, res) => {
   try {
     const refreshString = req.cookies?.refreshToken;
 
@@ -298,7 +298,7 @@ router.post("/logout", async (req, res) => {
       await RefreshToken.deleteOne({ token: refreshString });
     }
 
-    await RefreshToken.deleteMany({ user: user._id });
+    await RefreshToken.deleteMany({ user: req.user.id });
 
 
     res.clearCookie("refreshToken", {
