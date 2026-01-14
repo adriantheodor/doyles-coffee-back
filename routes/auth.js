@@ -4,7 +4,6 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const router = express.Router();
-const { sendVerificationEmail } = require("../utils/sendEmail");
 const User = require("../models/User");
 const RefreshToken = require("../models/RefreshToken");
 const { authenticateToken, requireRole } = require("../middleware/auth");
@@ -79,76 +78,22 @@ router.post("/register", async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(password, salt);
 
-    const verificationToken = crypto.randomBytes(32).toString("hex");
-
     const newUser = new User({
       name,
       email,
       password: hash,
       role: "customer", 
-      isVerified: false, 
-      verificationToken: verificationToken,
+      isVerified: true, // Auto-verify for now
     });
 
     await newUser.save();
 
-    // Improved email sending with detailed error handling
-    let emailSent = false;
-    try {
-      await sendVerificationEmail(newUser, verificationToken);
-      emailSent = true;
-      console.log(`✅ Verification email sent to ${email}`);
-    } catch (emailError) {
-      console.error("❌ Email sending failed:", emailError.message);
-      console.error("Full error:", emailError);
-      // User account is still created, they can request resend
-    }
-
     res.status(201).json({
-      message: emailSent 
-        ? "Registration successful. Please check your email to verify your account."
-        : "Registration successful, but we couldn't send the verification email. Please use the resend option.",
-      emailSent,
+      message: "Registration successful. You can now log in.",
     });
   } catch (err) {
     console.error("REGISTRATION ERROR:", err);
     res.status(500).json({ message: "Server error during registration" });
-  }
-});
-
-// =========================
-// 📧 RESEND VERIFICATION EMAIL
-// =========================
-router.post("/resend-verification", async (req, res) => {
-  const { email } = req.body;
-
-  if (!email) {
-    return res.status(400).json({ message: "Email is required" });
-  }
-
-  try {
-    const user = await User.findOne({ email });
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    if (user.isVerified) {
-      return res.status(400).json({ message: "Email already verified" });
-    }
-
-    // Generate new token if needed
-    if (!user.verificationToken) {
-      user.verificationToken = crypto.randomBytes(32).toString("hex");
-      await user.save();
-    }
-
-    await sendVerificationEmail(user, user.verificationToken);
-
-    res.json({ message: "Verification email resent successfully" });
-  } catch (err) {
-    console.error("RESEND VERIFICATION ERROR:", err);
-    res.status(500).json({ message: "Failed to resend verification email" });
   }
 });
 
@@ -246,13 +191,6 @@ router.post("/login", async (req, res) => {
     if (!passwordMatches)
       return res.status(401).json({ message: "Invalid credentials" });
 
-    if (!user.isVerified) {
-      return res.status(403).json({
-        message: "Please verify your email address before logging in.",
-        isUnverified: true,
-      });
-    }
-
     // Access token
     const accessToken = createAccessToken(user);
 
@@ -266,7 +204,7 @@ router.post("/login", async (req, res) => {
       user: user._id,
       expiresAt,
     }).save();
-
+ expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_DAYS);
     // ✅ FIXED: Used 'refreshString' instead of 'refreshToken'
     res.cookie("refreshToken", refreshString, {
       httpOnly: true,
@@ -275,53 +213,53 @@ router.post("/login", async (req, res) => {
       domain: ".doylesbreakroomservices.com",
       expires: expiresAt,
     });
-
-    res.json({
+    res.cookie("refreshToken", refreshString, {
+    res.json({ttpOnly: true,
       token: accessToken,
-      user: {
-        id: user._id,
+      user: {      sameSite: "none",
+        id: user._id,doylesbreakroomservices.com",
         name: user.name,
-        email: user.email,
+        email: user.email,);
         role: user.role,
       },
     });
   } catch (err) {
     console.error("LOGIN ERROR:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error" });        name: user.name,
   }
-});
+});r.role,
 
 // =========================
-// 🚪 LOGOUT
-// =========================
-router.post("/logout", authenticateToken, async (req, res) => {
+// 🚪 LOGOUT catch (err) {
+// ========================= console.error("LOGIN ERROR:", err);
+router.post("/logout", authenticateToken, async (req, res) => {    res.status(500).json({ message: "Server error" });
   try {
     const refreshString = req.cookies?.refreshToken;
 
     if (refreshString) {
       await RefreshToken.deleteOne({ token: refreshString });
-    }
-
+    }=====================
+ (req, res) => {
     await RefreshToken.deleteMany({ user: req.user.id });
-
+    const refreshString = req.cookies?.refreshToken;
 
     res.clearCookie("refreshToken", {
       httpOnly: true,
-      secure: true,
+      secure: true,    }
       sameSite: "none",
-      domain: ".doylesbreakroomservices.com", // Added domain to ensure clear works
+      domain: ".doylesbreakroomservices.com", // Added domain to ensure clear works user: req.user.id });
     });
 
-    res.json({ message: "Logged out" });
-  } catch (err) {
-    console.error("LOGOUT ERROR:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
+    res.json({ message: "Logged out" });learCookie("refreshToken", {
+  } catch (err) { httpOnly: true,
+    console.error("LOGOUT ERROR:", err);      secure: true,
+    res.status(500).json({ message: "Server error" });ne",
+  } Added domain to ensure clear works
+});    });
 
 // =========================
 // 🔒 CHANGE PASSWORD ROUTE
 // =========================
-router.post("/change-password", authenticateToken, changePassword);
+router.post("/change-password", authenticateToken, changePassword);    res.status(500).json({ message: "Server error" });
 
 module.exports = router;
