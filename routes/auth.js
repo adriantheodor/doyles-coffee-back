@@ -204,7 +204,7 @@ router.post("/login", async (req, res) => {
       user: user._id,
       expiresAt,
     }).save();
- expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_DAYS);
+
     // ✅ FIXED: Used 'refreshString' instead of 'refreshToken'
     res.cookie("refreshToken", refreshString, {
       httpOnly: true,
@@ -213,49 +213,48 @@ router.post("/login", async (req, res) => {
       domain: ".doylesbreakroomservices.com",
       expires: expiresAt,
     });
-    res.cookie("refreshToken", refreshString, {
-    res.json({ttpOnly: true,
+
+    res.json({
       token: accessToken,
-      user: {      sameSite: "none",
-        id: user._id,doylesbreakroomservices.com",
+      user: {
+        id: user._id,
         name: user.name,
-        email: user.email,);
+        email: user.email,
         role: user.role,
       },
     });
   } catch (err) {
     console.error("LOGIN ERROR:", err);
-    res.status(500).json({ message: "Server error" });        name: user.name,
+    res.status(500).json({ message: "Server error" });
   }
-});r.role,
+});
 
 // =========================
-// 🚪 LOGOUT catch (err) {
-// ========================= console.error("LOGIN ERROR:", err);
-router.post("/logout", authenticateToken, async (req, res) => {    res.status(500).json({ message: "Server error" });
+// 🚪 LOGOUT
+// =========================
+router.post("/logout", authenticateToken, async (req, res) => {
   try {
     const refreshString = req.cookies?.refreshToken;
 
     if (refreshString) {
       await RefreshToken.deleteOne({ token: refreshString });
-    }=====================
- (req, res) => {
+    }
+
     await RefreshToken.deleteMany({ user: req.user.id });
-    const refreshString = req.cookies?.refreshToken;
 
     res.clearCookie("refreshToken", {
       httpOnly: true,
-      secure: true,    }
+      secure: true,
       sameSite: "none",
-      domain: ".doylesbreakroomservices.com", // Added domain to ensure clear works user: req.user.id });
+      domain: ".doylesbreakroomservices.com", // Added domain to ensure clear works
     });
 
-    res.json({ message: "Logged out" });learCookie("refreshToken", {
-  } catch (err) { httpOnly: true,
-    console.error("LOGOUT ERROR:", err);      secure: true,
-    res.status(500).json({ message: "Server error" });ne",
-  } Added domain to ensure clear works
-});    });
+    res.json({ message: "Logged out" });
+  } catch (err) {
+    console.error("LOGOUT ERROR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
 
 // =========================
 // 🔒 CHANGE PASSWORD ROUTE
