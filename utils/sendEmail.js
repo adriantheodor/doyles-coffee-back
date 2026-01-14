@@ -1,175 +1,65 @@
 const nodemailer = require("nodemailer");
 
+// Validate environment variables
+const requiredEnvVars = ["EMAIL_USER", "EMAIL_PASS", "FRONTEND_URL"];
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingVars.length > 0) {
+  console.error(`❌ Missing required environment variables: ${missingVars.join(", ")}`);
+}
+
+// Create transporter for Brevo (Sendinblue)
 const transporter = nodemailer.createTransport({
   host: "smtp-relay.brevo.com",
   port: 587,
-  secure: false, // true for 465, false for other ports
+  secure: false,
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
+    user: process.env.EMAIL_USER, // Your Brevo email
+    pass: process.env.EMAIL_PASS, // Your Brevo SMTP key
   },
 });
 
-/**
- * Format a JS Date into ICS-compatible timestamp (UTC)
- */
-const formatICSDate = (date) =>
-  date
-    .toISOString()
-    .replace(/[-:]/g, "")
-    .replace(/\.\d{3}Z$/, "Z");
-
-/**
- * Fully RFC 5545–compliant ICS generator
- */
-function generateICS({
-  title,
-  description,
-  start,
-  durationMinutes = 30,
-  organizerEmail = process.env.SMTP_USER,
-  clientName,
-  clientEmail,
-}) {
-  const dtStart = new Date(start);
-  const dtEnd = new Date(dtStart.getTime() + durationMinutes * 60000);
-
-  const uid = `${Date.now()}-${Math.random()}@doyles.com`;
-  const dtStamp = formatICSDate(new Date());
-
-  // ICS **must** use CRLF (\r\n)
-  const icsLines = [
-    "BEGIN:VCALENDAR",
-    "PRODID:-//Doyle's Coffee//EN",
-    "VERSION:2.0",
-    "CALSCALE:GREGORIAN",
-    "METHOD:REQUEST",
-
-    "BEGIN:VEVENT",
-    `UID:${uid}`,
-    `DTSTAMP:${dtStamp}`,
-    `DTSTART:${formatICSDate(dtStart)}`,
-    `DTEND:${formatICSDate(dtEnd)}`,
-
-    `SUMMARY:${title}`,
-    `DESCRIPTION:${description.replace(/\n/g, "\\n")}`,
-
-    `ORGANIZER;CN=Doyle's Coffee:mailto:${organizerEmail}`,
-    `ATTENDEE;CN=${clientName}:mailto:${clientEmail}`,
-
-    "SEQUENCE:0",
-    "STATUS:CONFIRMED",
-    "TRANSP:OPAQUE",
-
-    "END:VEVENT",
-    "END:VCALENDAR",
-  ];
-
-  return icsLines.join("\r\n");
-}
-
-async function sendEmail({ to, subject, html, ics }) {
-  if (!ics) {
-    // simple non-calendar email
-    return transporter.sendMail({
-      from: `"Doyle’s Coffee" <${process.env.SMTP_USER}>`,
-      to,
-      subject,
-      html,
-    });
+// Verify transporter configuration
+transporter.verify((error, success) => {
+  if (error) {
+    console.error("❌ Email transporter verification failed:", error);
+  } else {
+    console.log("✅ Email server is ready to send messages");
   }
+});
 
-  // Build the full MIME message manually so Apple doesn't break it
-  const boundaryMixed = "mixed-" + Date.now();
-  const boundaryAlt = "alt-" + Date.now();
+async function sendVerificationEmail(user, verificationToken) {
+  const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
 
-  const mime = [
-    `MIME-Version: 1.0`,
-    `From: "Doyle’s Coffee" <${process.env.SMTP_USER}>`,
-    `To: ${to}`,
-    `Subject: ${subject}`,
-    `Content-Type: multipart/mixed; boundary="${boundaryMixed}"`,
-    ``,
-    `--${boundaryMixed}`,
-    `Content-Type: multipart/alternative; boundary="${boundaryAlt}"`,
-    ``,
+  const mailOptions = {
+    from: `"${process.env.EMAIL_FROM_NAME || "Doyle's Coffee"}" <${process.env.EMAIL_USER}>`,
+    to: user.email,
+    subject: 'Verify Your Email Address',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2>Welcome to Doyle's Coffee, ${user.name}!</h2>
+        <p>Thank you for registering. Please verify your email address by clicking the button below:</p>
+        <a href="${verificationUrl}" 
+           style="display: inline-block; padding: 12px 24px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 4px; margin: 20px 0;">
+          Verify Email
+        </a>
+        <p>Or copy and paste this link into your browser:</p>
+        <p style="color: #666; word-break: break-all;">${verificationUrl}</p>
+        <p style="color: #999; font-size: 12px; margin-top: 30px;">
+          If you didn't create this account, please ignore this email.
+        </p>
+      </div>
+    `,
+  };
 
-    // ICS MUST BE FIRST FOR APPLE
-    `--${boundaryAlt}`,
-    `Content-Type: text/calendar; method=REQUEST; charset="UTF-8"`,
-    `Content-Transfer-Encoding: 7bit`,
-    ``,
-    ics,
-    ``,
-
-    // HTML SECOND
-    `--${boundaryAlt}`,
-    `Content-Type: text/html; charset="UTF-8"`,
-    `Content-Transfer-Encoding: 7bit`,
-    ``,
-    html,
-    ``,
-
-    `--${boundaryAlt}--`,
-    ``,
-
-    // Attachment version of ICS
-    `--${boundaryMixed}`,
-    `Content-Type: application/ics; name="booking.ics"`,
-    `Content-Disposition: attachment; filename="booking.ics"`,
-    `Content-Transfer-Encoding: 7bit`,
-    ``,
-    ics,
-    ``,
-
-    `--${boundaryMixed}--`,
-  ].join("\r\n");
-
-
-
-  return transporter.sendMail({
-    envelope: {
-      from: process.env.SMTP_USER,
-      to,
-    },
-    raw: mime,
-  });
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log("✅ Email sent successfully:", info.messageId);
+    return info;
+  } catch (error) {
+    console.error("❌ Email sending failed:", error.message);
+    throw error;
+  }
 }
 
-const sendVerificationEmail = async (user, token) => {
-  // Make sure to add CLIENT_URL to your .env (e.g., http://localhost:5173)
-  const clientUrl = process.env.CORS_ORIGIN || "http://localhost:3000";
-  
-  // This points to the Frontend route
-  const verifyUrl = `${clientUrl}/verify-email?token=${token}`;
-
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
-      <h2 style="color: #7a4b25; text-align: center;">Welcome to Doyle’s Portal!</h2>
-      <p>Hi ${user.name},</p>
-      <p>Thank you for creating an account with Doyle’s Coffee Services. To secure your account, please verify your email address by clicking the button below.</p>
-      
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="${verifyUrl}" style="background-color: #7a4b25; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;">
-          Verify My Account
-        </a>
-      </div>
-
-      <p style="margin-bottom: 5px;">Or copy and paste this link into your browser:</p>
-      <p style="word-break: break-all; color: #555; font-size: 13px; background: #f9f9f9; padding: 10px; border-radius: 4px;">${verifyUrl}</p>
-      
-      <hr style="border:0; border-top:1px solid #eee; margin: 30px 0;">
-      <p style="font-size: 12px; color: #999; text-align: center;">
-        If you did not sign up for this account, you can safely ignore this email.
-      </p>
-    </div>
-  `;
-
-  return sendEmail({
-    to: user.email,
-    subject: "Verify your email - Doyle’s Portal",
-    html,
-  });
-};
-
-module.exports = { sendEmail, generateICS, sendVerificationEmail};
+module.exports = { sendVerificationEmail };

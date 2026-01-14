@@ -66,7 +66,6 @@ const changePassword = async (req, res) => {
 // =========================
 
 router.post("/register", async (req, res) => {
-  // 1. Remove 'role' from the destructuring so we ignore user input
   const { name, email, password } = req.body;
 
   if (!name || !email || !password)
@@ -82,7 +81,6 @@ router.post("/register", async (req, res) => {
 
     const verificationToken = crypto.randomBytes(32).toString("hex");
 
-    // 2. HARDCODE role: 'customer' here
     const newUser = new User({
       name,
       email,
@@ -94,17 +92,23 @@ router.post("/register", async (req, res) => {
 
     await newUser.save();
 
+    // Improved email sending with detailed error handling
+    let emailSent = false;
     try {
       await sendVerificationEmail(newUser, verificationToken);
+      emailSent = true;
+      console.log(`✅ Verification email sent to ${email}`);
     } catch (emailError) {
-      console.error("Email sending failed:", emailError);
-      // Optional: You might want to delete the user if email fails,
-      // or just tell the frontend "Account created but email failed."
+      console.error("❌ Email sending failed:", emailError.message);
+      console.error("Full error:", emailError);
+      // User account is still created, they can request resend
     }
 
     res.status(201).json({
-      message:
-        "Registration successful. Please check your email to verify your account.",
+      message: emailSent 
+        ? "Registration successful. Please check your email to verify your account."
+        : "Registration successful, but we couldn't send the verification email. Please use the resend option.",
+      emailSent,
     });
   } catch (err) {
     console.error("REGISTRATION ERROR:", err);
@@ -112,41 +116,41 @@ router.post("/register", async (req, res) => {
   }
 });
 
-router.post(
-  "/create-admin",
-  authenticateToken,
-  requireRole("admin"),
-  async (req, res) => {
-    const { name, email, password } = req.body;
+// =========================
+// 📧 RESEND VERIFICATION EMAIL
+// =========================
+router.post("/resend-verification", async (req, res) => {
+  const { email } = req.body;
 
-    if (!name || !email || !password)
-      return res.status(400).json({ message: "Missing fields" });
-
-    try {
-      const existingUser = await User.findOne({ email });
-      if (existingUser)
-        return res.status(400).json({ message: "User already exists" });
-
-      const salt = await bcrypt.genSalt(10);
-      const hash = await bcrypt.hash(password, salt);
-
-      // Because this route is protected by requireRole("admin"),
-      // it is safe to create an admin here.
-      const newAdmin = new User({
-        name,
-        email,
-        password: hash,
-        role: "admin",
-      });
-
-      await newAdmin.save();
-      res.status(201).json({ message: "New Admin created successfully" });
-    } catch (err) {
-      console.error("ADMIN CREATION ERROR:", err);
-      res.status(500).json({ message: "Server error" });
-    }
+  if (!email) {
+    return res.status(400).json({ message: "Email is required" });
   }
-);
+
+  try {
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({ message: "Email already verified" });
+    }
+
+    // Generate new token if needed
+    if (!user.verificationToken) {
+      user.verificationToken = crypto.randomBytes(32).toString("hex");
+      await user.save();
+    }
+
+    await sendVerificationEmail(user, user.verificationToken);
+
+    res.json({ message: "Verification email resent successfully" });
+  } catch (err) {
+    console.error("RESEND VERIFICATION ERROR:", err);
+    res.status(500).json({ message: "Failed to resend verification email" });
+  }
+});
 
 // =========================
 // 🔄 REFRESH ACCESS TOKEN
