@@ -259,6 +259,6 @@ router.post("/logout", authenticateToken, async (req, res) => {
 // =========================
 // 🔒 CHANGE PASSWORD ROUTE
 // =========================
-router.post("/change-password", authenticateToken, changePassword);    res.status(500).json({ message: "Server error" });
+router.post("/change-password", authenticateToken, changePassword);
 
 module.exports = router;
