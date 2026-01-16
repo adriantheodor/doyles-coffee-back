@@ -7,6 +7,7 @@ const router = express.Router();
 const User = require("../models/User");
 const RefreshToken = require("../models/RefreshToken");
 const { authenticateToken, requireRole } = require("../middleware/auth");
+const { sendVerificationEmail } = require("../utils/sendEmail");
 
 // =========================
 // 🔐 ENV + SECURITY SECTION
@@ -78,19 +79,33 @@ router.post("/register", async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(password, salt);
 
+    // Generate verification token
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+
     const newUser = new User({
       name,
       email,
       password: hash,
-      role: "customer", 
-      isVerified: true, // Auto-verify for now
+      role: "customer",
+      isVerified: false,
+      verificationToken,
     });
 
     await newUser.save();
 
-    res.status(201).json({
-      message: "Registration successful. You can now log in.",
-    });
+    // Send verification email
+    try {
+      await sendVerificationEmail(newUser, verificationToken);
+      res.status(201).json({
+        message: "Registration successful. Please check your email to verify your account.",
+      });
+    } catch (emailError) {
+      console.error("Failed to send verification email:", emailError);
+      // User is created but email failed to send
+      res.status(201).json({
+        message: "Registration successful, but verification email could not be sent. Please contact support.",
+      });
+    }
   } catch (err) {
     console.error("REGISTRATION ERROR:", err);
     res.status(500).json({ message: "Server error during registration" });
