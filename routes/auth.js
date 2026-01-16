@@ -206,6 +206,11 @@ router.post("/login", async (req, res) => {
     if (!passwordMatches)
       return res.status(401).json({ message: "Invalid credentials" });
 
+    // Check if email is verified
+    if (!user.isVerified) {
+      return res.status(403).json({ message: "Please verify your email before logging in" });
+    }
+
     // Access token
     const accessToken = createAccessToken(user);
 
