@@ -58,6 +58,7 @@ async function sendEmail({ to, subject, html, ics }) {
 // =========================
 async function sendVerificationEmail(user, verificationToken) {
   const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+  const resendUrl = `${process.env.FRONTEND_URL}/verify-email?email=${encodeURIComponent(user.email)}&resend=true`;
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -69,7 +70,10 @@ async function sendVerificationEmail(user, verificationToken) {
       </a>
       <p>Or copy and paste this link into your browser:</p>
       <p style="color: #666; word-break: break-all;">${verificationUrl}</p>
-      <p style="color: #999; font-size: 12px; margin-top: 30px;">
+      <p style="color: #999; font-size: 12px; margin-top: 20px; border-top: 1px solid #eee; padding-top: 20px;">
+        Didn't receive this email or it expired? <a href="${resendUrl}" style="color: #4CAF50; text-decoration: none;">Request a new verification email</a>
+      </p>
+      <p style="color: #999; font-size: 12px; margin-top: 10px;">
         If you didn't create this account, please ignore this email.
       </p>
     </div>
