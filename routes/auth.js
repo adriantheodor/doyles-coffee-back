@@ -81,6 +81,8 @@ router.post("/register", async (req, res) => {
 
     // Generate verification token
     const verificationToken = crypto.randomBytes(32).toString("hex");
+    const verificationTokenExpiresAt = new Date();
+    verificationTokenExpiresAt.setHours(verificationTokenExpiresAt.getHours() + TOKEN_EXPIRES_HOURS);
 
     const newUser = new User({
       name,
@@ -89,6 +91,7 @@ router.post("/register", async (req, res) => {
       role: "customer",
       isVerified: false,
       verificationToken,
+      verificationTokenExpiresAt,
     });
 
     await newUser.save();
@@ -181,15 +184,109 @@ router.post("/verify-email", async (req, res) => {
       return res.status(400).json({ message: "Invalid or expired token" });
     }
 
+    // Check token expiration
+    if (user.verificationTokenExpiresAt && new Date() > user.verificationTokenExpiresAt) {
+      return res.status(400).json({ message: "Verification token has expired" });
+    }
+
     // Verify the user
     user.isVerified = true;
-    user.verificationToken = undefined; // Clear the token so it can't be reused
+    user.verificationToken = undefined;
+    user.verificationTokenExpiresAt = undefined;
+    user.verificationEmailResendCount = 0; // Reset resend count after successful verification
     await user.save();
 
     res.json({ message: "Email verified successfully! You can now log in." });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// =========================
+// 📧 RESEND VERIFICATION EMAIL
+// =========================
+// Rate-limit: Max 3 resends per 15 minutes
+const RESEND_MAX_ATTEMPTS = 3;
+const RESEND_WINDOW_MINUTES = 15;
+const TOKEN_EXPIRES_HOURS = 24;
+
+router.post("/resend-verification-email", async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ message: "Email is required" });
+  }
+
+  try {
+    const user = await User.findOne({ email });
+
+    // Always return a generic success message for security (don't reveal if email exists)
+    const successMessage = "If an unverified account exists with this email, a verification email has been sent.";
+
+    if (!user) {
+      return res.status(200).json({ message: successMessage });
+    }
+
+    // If already verified, return success (don't reveal status)
+    if (user.isVerified) {
+      return res.status(200).json({ message: successMessage });
+    }
+
+    // =========================
+    // 🔒 RATE-LIMITING CHECK
+    // =========================
+    if (user.lastVerificationEmailSentAt) {
+      const timeSinceLastResend = new Date() - new Date(user.lastVerificationEmailSentAt);
+      const minutesSinceLastResend = timeSinceLastResend / (1000 * 60);
+
+      // Check if within the resend window and exceeded max attempts
+      if (minutesSinceLastResend < RESEND_WINDOW_MINUTES && user.verificationEmailResendCount >= RESEND_MAX_ATTEMPTS) {
+        console.warn(`⚠️ Rate limit exceeded for user: ${email}`);
+        return res.status(200).json({ message: successMessage }); // Return success anyway for security
+      }
+
+      // Reset counter if outside the window
+      if (minutesSinceLastResend >= RESEND_WINDOW_MINUTES) {
+        user.verificationEmailResendCount = 0;
+      }
+    }
+
+    // =========================
+    // 🔑 GENERATE NEW TOKEN
+    // =========================
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + TOKEN_EXPIRES_HOURS);
+
+    // Update user with new token and tracking info
+    user.verificationToken = verificationToken;
+    user.verificationTokenExpiresAt = expiresAt;
+    user.lastVerificationEmailSentAt = new Date();
+    user.verificationEmailResendCount = (user.verificationEmailResendCount || 0) + 1;
+
+    await user.save();
+
+    // =========================
+    // 📧 SEND EMAIL (Fire and forget)
+    // =========================
+    // Send email but don't let failures affect the response
+    sendVerificationEmail(user, verificationToken)
+      .then(() => {
+        console.log(`✅ Verification email resent to: ${user.email}`);
+      })
+      .catch((error) => {
+        console.error(`❌ Failed to send verification email to ${user.email}:`, error.message);
+        // Don't throw - email service failures shouldn't fail the request
+      });
+
+    // Return success message regardless of email status
+    res.status(200).json({ message: successMessage });
+
+  } catch (err) {
+    console.error("RESEND VERIFICATION EMAIL ERROR:", err);
+    // Return generic success for security
+    res.status(200).json({ message: "If an unverified account exists with this email, a verification email has been sent." });
   }
 });
 

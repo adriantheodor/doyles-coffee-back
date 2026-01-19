@@ -26,6 +26,9 @@ const userSchema = new mongoose.Schema({
   },
   isVerified: { type: Boolean, default: false },
   verificationToken: { type: String },
+  verificationTokenExpiresAt: { type: Date },
+  lastVerificationEmailSentAt: { type: Date },
+  verificationEmailResendCount: { type: Number, default: 0 },
 });
 
 module.exports = mongoose.models.User || mongoose.model("User", userSchema);
