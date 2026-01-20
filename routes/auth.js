@@ -297,15 +297,31 @@ router.post("/login", async (req, res) => {
   const { email, password } = req.body;
   try {
     const user = await User.findOne({ email });
-    if (!user) return res.status(401).json({ message: "Invalid credentials" });
+    if (!user) {
+      return res.status(401).json({ 
+        message: "Invalid credentials",
+        code: "INVALID_CREDENTIALS",
+        field: null // Don't reveal which field failed
+      });
+    }
 
     const passwordMatches = await bcrypt.compare(password, user.password);
-    if (!passwordMatches)
-      return res.status(401).json({ message: "Invalid credentials" });
+    if (!passwordMatches) {
+      return res.status(401).json({ 
+        message: "Invalid credentials",
+        code: "INVALID_CREDENTIALS",
+        field: null // Don't reveal which field failed
+      });
+    }
 
     // Check if email is verified
     if (!user.isVerified) {
-      return res.status(403).json({ message: "Please verify your email before logging in" });
+      return res.status(403).json({ 
+        message: "Please verify your email before logging in",
+        code: "UNVERIFIED_ACCOUNT",
+        unverified: true,
+        email: user.email
+      });
     }
 
     // Access token
@@ -347,7 +363,78 @@ router.post("/login", async (req, res) => {
 });
 
 // =========================
-// 🚪 LOGOUT
+// � CHECK AUTH STATUS & LOADING STATE
+// =========================
+router.get("/check-auth", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(" ")[1];
+
+    if (!token) {
+      return res.json({ 
+        isAuthenticated: false,
+        isLoading: false
+      });
+    }
+
+    jwt.verify(token, JWT_SECRET, async (err, decoded) => {
+      if (err) {
+        if (err.name === "TokenExpiredError") {
+          return res.json({ 
+            isAuthenticated: false,
+            isLoading: false,
+            sessionExpired: true,
+            message: "Session expired. Please log in again.",
+            code: "SESSION_EXPIRED"
+          });
+        }
+        return res.json({ 
+          isAuthenticated: false,
+          isLoading: false
+        });
+      }
+
+      // Token is valid, fetch current user
+      try {
+        const user = await User.findById(decoded.id).select("-password");
+        if (!user) {
+          return res.json({ 
+            isAuthenticated: false,
+            isLoading: false
+          });
+        }
+
+        res.json({
+          isAuthenticated: true,
+          isLoading: false,
+          user: {
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            isVerified: user.isVerified
+          }
+        });
+      } catch (dbErr) {
+        console.error("Error fetching user:", dbErr);
+        res.json({ 
+          isAuthenticated: false,
+          isLoading: false
+        });
+      }
+    });
+  } catch (err) {
+    console.error("CHECK AUTH ERROR:", err);
+    res.status(500).json({ 
+      isAuthenticated: false,
+      isLoading: false,
+      message: "Server error"
+    });
+  }
+});
+
+// =========================
+// �🚪 LOGOUT
 // =========================
 router.post("/logout", authenticateToken, async (req, res) => {
   try {
