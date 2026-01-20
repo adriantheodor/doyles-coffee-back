@@ -5,7 +5,6 @@ const invoiceSchema = new mongoose.Schema({
   order: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Order",
-    required: true,
   },
   customer: {
     type: mongoose.Schema.Types.ObjectId,
@@ -13,7 +12,11 @@ const invoiceSchema = new mongoose.Schema({
     required: true,
   },
   fileUrl: {
-    type: String,  // optional PDF/IMG upload
+    type: String,  // PDF/IMG upload from admin
+    default: "",
+  },
+  fileName: {
+    type: String,
     default: "",
   },
   notes: {
@@ -22,7 +25,19 @@ const invoiceSchema = new mongoose.Schema({
   },
   totalAmount: {
     type: Number,
-    required: true,   
+  },
+  isSent: {
+    type: Boolean,
+    default: false,
+  },
+  sentAt: {
+    type: Date,
+    default: null,
+  },
+  sentBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    default: null,
   },
   createdAt: {
     type: Date,

@@ -54,6 +54,9 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
+// Serve uploaded files
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
 // Routes
 const authRoutes = require("./routes/auth");
 

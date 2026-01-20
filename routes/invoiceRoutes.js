@@ -3,35 +3,75 @@ const express = require("express");
 const router = express.Router();
 const Invoice = require("../models/Invoice");
 const Order = require("../models/Order");
+const invoiceController = require("../controllers/invoiceController");
+const upload = require("../config/multer");
 const PDFDocument = require("pdfkit");
 const { authenticateToken, requireRole } = require("../middleware/auth");
 
+// ================================
+// FILE UPLOAD & SENDING ENDPOINTS
+// ================================
+
+// Upload invoice file - Admin only
+router.post(
+  "/upload",
+  authenticateToken,
+  requireRole("admin"),
+  upload.single("invoice"),
+  invoiceController.uploadInvoice
+);
+
+// Send already uploaded invoice to customer - Admin only
+router.post(
+  "/:id/send",
+  authenticateToken,
+  requireRole("admin"),
+  invoiceController.sendInvoiceToCustomer
+);
+
+// Upload and send invoice in one request - Admin only
+router.post(
+  "/upload-and-send",
+  authenticateToken,
+  requireRole("admin"),
+  upload.single("invoice"),
+  invoiceController.uploadAndSendInvoice
+);
+
+// ================================
+// EXISTING ENDPOINTS
+// ================================
+
 // GET all invoices (admin)
-router.get("/", authenticateToken, requireRole("admin"), async (req, res) => {
-  try {
-    const invoices = await Invoice.find()
-      .populate("order")
-      .populate("customer", "name email");
-    res.json(invoices);
-  } catch (err) {
-    console.error("Invoice Fetch Error:", err);
-    res.status(500).json({ message: "Failed to fetch invoices" });
-  }
-});
+router.get("/", authenticateToken, requireRole("admin"), invoiceController.getAllInvoices);
 
 // GET my invoices (customer)
-router.get("/my", authenticateToken, async (req, res) => {
-  try {
-    const invoices = await Invoice.find({ customer: req.user.id }).populate(
-      "order"
-    );
-    res.json(invoices);
-  } catch (err) {
-    res.status(500).json({ message: "Failed to fetch your invoices" });
-  }
-});
+router.get("/my-invoices/list", authenticateToken, invoiceController.getMyInvoices);
 
-// CREATE invoice manually (admin only)
+// GET invoices for specific customer (admin only)
+router.get(
+  "/customer/:customerId",
+  authenticateToken,
+  requireRole("admin"),
+  invoiceController.getCustomerInvoices
+);
+
+// GET specific invoice
+router.get(
+  "/details/:id",
+  authenticateToken,
+  invoiceController.getInvoice
+);
+
+// DELETE invoice (admin only)
+router.delete(
+  "/:id",
+  authenticateToken,
+  requireRole("admin"),
+  invoiceController.deleteInvoice
+);
+
+// CREATE invoice manually (admin only) - Legacy endpoint
 router.post("/", authenticateToken, requireRole("admin"), async (req, res) => {
   try {
     const { orderId } = req.body;
@@ -43,7 +83,7 @@ router.post("/", authenticateToken, requireRole("admin"), async (req, res) => {
       order: order._id,
       customer: order.customer,
       items: order.items,
-      totalPrice: order.totalPrice,
+      totalAmount: order.totalPrice,
       notes: order.notes,
     });
 
@@ -55,6 +95,7 @@ router.post("/", authenticateToken, requireRole("admin"), async (req, res) => {
   }
 });
 
+// Generate PDF for invoice
 router.get("/:id/pdf", authenticateToken, async (req, res) => {
   try {
     const invoice = await Invoice.findById(req.params.id)
@@ -89,25 +130,36 @@ router.get("/:id/pdf", authenticateToken, async (req, res) => {
     // CUSTOMER INFO
     doc.fontSize(12);
     doc.text(`Invoice ID: ${invoice._id}`);
-    doc.text(`Order ID: ${invoice.order._id}`);
+    if (invoice.order) {
+      doc.text(`Order ID: ${invoice.order._id}`);
+    }
     doc.text(`Customer: ${invoice.customer.name}`);
     doc.text(`Email: ${invoice.customer.email}`);
     doc.text(`Date: ${new Date(invoice.createdAt).toLocaleDateString()}`);
     doc.moveDown();
 
-    // ITEMS
-    doc.fontSize(14).text("Order Items:");
-    doc.moveDown();
+    // ITEMS (if order exists)
+    if (invoice.order && invoice.order.items) {
+      doc.fontSize(14).text("Order Items:");
+      doc.moveDown();
 
-    invoice.order.items.forEach((item) => {
-      doc
-        .fontSize(12)
-        .text(
-          `${item.product.name} — Qty: ${item.quantity} — $${item.product.price?.toFixed(2)}`
-        );
-    });
+      invoice.order.items.forEach((item) => {
+        doc
+          .fontSize(12)
+          .text(
+            `${item.product.name} — Qty: ${item.quantity} — $${item.product.price?.toFixed(2)}`
+          );
+      });
 
-    doc.moveDown();
+      doc.moveDown();
+    }
+
+    // NOTES
+    if (invoice.notes) {
+      doc.fontSize(14).text("Notes:");
+      doc.fontSize(12).text(invoice.notes);
+      doc.moveDown();
+    }
 
     doc
       .fontSize(14)

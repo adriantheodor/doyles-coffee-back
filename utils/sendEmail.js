@@ -148,4 +148,42 @@ END:VCALENDAR`;
   return ics;
 }
 
-module.exports = { sendEmail, sendVerificationEmail, generateICS };
+// =========================
+// 📧 SEND INVOICE EMAIL
+// =========================
+async function sendInvoiceEmail({ to, customerName, invoiceId, fileName, notes }) {
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background-color: #4CAF50; color: white; padding: 20px; border-radius: 4px 4px 0 0;">
+        <h2 style="margin: 0;">📄 Invoice from Doyle's Coffee</h2>
+      </div>
+      <div style="background-color: #f9f9f9; padding: 20px; border-radius: 0 0 4px 4px;">
+        <p>Hi ${customerName},</p>
+        <p>Please find your invoice attached below. We appreciate your business!</p>
+        
+        <div style="background-color: white; padding: 15px; border-left: 4px solid #4CAF50; margin: 20px 0;">
+          <p><strong>Invoice ID:</strong> ${invoiceId}</p>
+          <p><strong>File:</strong> ${fileName}</p>
+          ${notes ? `<p><strong>Notes:</strong></p><p style="color: #666;">${notes}</p>` : ""}
+        </div>
+
+        <div style="background-color: white; padding: 15px; border: 1px solid #ddd; border-radius: 4px; margin: 20px 0;">
+          <p style="margin: 0; color: #999; font-size: 12px;">If you have any questions about this invoice, please don't hesitate to contact us.</p>
+        </div>
+
+        <p style="color: #999; font-size: 12px; margin-top: 20px; border-top: 1px solid #eee; padding-top: 20px;">
+          Best regards,<br>
+          <strong>Doyle's Coffee & Break Room Services</strong>
+        </p>
+      </div>
+    </div>
+  `;
+
+  return sendEmail({
+    to,
+    subject: `Invoice from Doyle's Coffee - ${invoiceId}`,
+    html,
+  });
+}
+
+module.exports = { sendEmail, sendVerificationEmail, generateICS, sendInvoiceEmail };
