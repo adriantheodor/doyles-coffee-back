@@ -262,6 +262,8 @@ exports.getCustomerInvoices = async (req, res) => {
     }
 
     const invoices = await Invoice.find({ customer: customerId })
+      .populate("customer", "name email")
+      .populate("order", "_id totalPrice")
       .populate("sentBy", "name email")
       .sort({ createdAt: -1 });
 

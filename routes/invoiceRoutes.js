@@ -88,7 +88,13 @@ router.post("/", authenticateToken, requireRole("admin"), async (req, res) => {
     });
 
     await invoice.save();
-    res.status(201).json(invoice);
+    
+    // Populate customer and order before responding
+    const populatedInvoice = await Invoice.findById(invoice._id)
+      .populate("customer", "name email")
+      .populate("order", "_id totalPrice");
+    
+    res.status(201).json(populatedInvoice);
   } catch (err) {
     console.error("Invoice create error:", err);
     res.status(500).json({ message: "Failed to create invoice" });
