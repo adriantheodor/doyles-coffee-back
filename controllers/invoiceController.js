@@ -172,6 +172,7 @@ exports.getAllInvoices = async (req, res) => {
   try {
     const invoices = await Invoice.find()
       .populate("customer", "name email")
+      .populate("order", "_id totalPrice")
       .populate("sentBy", "name email")
       .sort({ createdAt: -1 });
 
@@ -186,6 +187,7 @@ exports.getAllInvoices = async (req, res) => {
 exports.getMyInvoices = async (req, res) => {
   try {
     const invoices = await Invoice.find({ customer: req.user.id })
+      .populate("order", "_id totalPrice")
       .populate("sentBy", "name email")
       .sort({ createdAt: -1 });
 
@@ -201,6 +203,7 @@ exports.getInvoice = async (req, res) => {
   try {
     const invoice = await Invoice.findById(req.params.id)
       .populate("customer", "name email")
+      .populate("order", "_id totalPrice")
       .populate("sentBy", "name email");
 
     if (!invoice) {
