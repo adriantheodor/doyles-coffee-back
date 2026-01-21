@@ -116,7 +116,23 @@ router.get("/:id/pdf", authenticateToken, async (req, res) => {
       return res.status(403).json({ message: "Not authorized" });
     }
 
+    // Validate required data before piping
+    if (!invoice.customer || !invoice.customer.name) {
+      return res.status(400).json({ message: "Customer information is incomplete" });
+    }
+
     const doc = new PDFDocument();
+    
+    // Handle errors on the document stream
+    doc.on("error", (err) => {
+      console.error("PDF generation error:", err);
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Failed to generate PDF" });
+      }
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="invoice-${invoice._id}.pdf"`);
     doc.pipe(res);
 
     // HEADER
@@ -144,10 +160,13 @@ router.get("/:id/pdf", authenticateToken, async (req, res) => {
       doc.moveDown();
 
       invoice.order.items.forEach((item) => {
+        // Safely handle null product references
+        const productName = item.product?.name || "Unknown Product";
+        const productPrice = item.product?.price || 0;
         doc
           .fontSize(12)
           .text(
-            `${item.product.name} — Qty: ${item.quantity} — $${item.product.price?.toFixed(2)}`
+            `${productName} — Qty: ${item.quantity} — $${productPrice.toFixed(2)}`
           );
       });
 
@@ -168,7 +187,9 @@ router.get("/:id/pdf", authenticateToken, async (req, res) => {
     doc.end();
   } catch (err) {
     console.error("PDF ERROR:", err);
-    res.status(500).json({ message: "Failed to generate PDF" });
+    if (!res.headersSent) {
+      res.status(500).json({ message: "Failed to generate PDF" });
+    }
   }
 });
 
