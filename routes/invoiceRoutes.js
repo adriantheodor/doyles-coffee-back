@@ -116,11 +116,6 @@ router.get("/:id/pdf", authenticateToken, async (req, res) => {
       return res.status(403).json({ message: "Not authorized" });
     }
 
-    // Validate required data before piping
-    if (!invoice.customer || !invoice.customer.name) {
-      return res.status(400).json({ message: "Customer information is incomplete" });
-    }
-
     const doc = new PDFDocument();
     
     // Handle errors on the document stream
@@ -149,8 +144,10 @@ router.get("/:id/pdf", authenticateToken, async (req, res) => {
     if (invoice.order) {
       doc.text(`Order ID: ${invoice.order._id}`);
     }
-    doc.text(`Customer: ${invoice.customer.name}`);
-    doc.text(`Email: ${invoice.customer.email}`);
+    const customerName = invoice.customer?.name || "Unknown Customer";
+    const customerEmail = invoice.customer?.email || "N/A";
+    doc.text(`Customer: ${customerName}`);
+    doc.text(`Email: ${customerEmail}`);
     doc.text(`Date: ${new Date(invoice.createdAt).toLocaleDateString()}`);
     doc.moveDown();
 
