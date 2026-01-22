@@ -1,8 +1,11 @@
 const express = require("express");
 const router = express.Router();
+const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const QuoteRequest = require("../models/QuoteRequest");
+const User = require("../models/User");
 const { authenticateToken, requireRole } = require("../middleware/auth");
-const { sendEmail, generateICS } = require("../utils/sendEmail");
+const { sendEmail, generateICS, sendVerificationEmail } = require("../utils/sendEmail");
 
 // Create a new quote request
 router.post("/", async (req, res) => {
@@ -223,6 +226,106 @@ router.put(
     } catch (err) {
       console.error(err);
       res.status(500).json({ message: "Failed to mark quote completed" });
+    }
+  }
+);
+
+// Convert quote to customer account + create user
+router.post(
+  "/:quoteId/convert-to-customer",
+  authenticateToken,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const { quoteId } = req.params;
+      const { password } = req.body;
+
+      // Validate password provided
+      if (!password) {
+        return res.status(400).json({ message: "Password is required" });
+      }
+
+      // Fetch the quote
+      const quote = await QuoteRequest.findById(quoteId);
+      if (!quote) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      // Check if user already exists with this email
+      const existingUser = await User.findOne({ email: quote.email });
+      if (existingUser) {
+        return res.status(400).json({ message: "User account already exists for this email" });
+      }
+
+      // Hash the password
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      // Generate verification token
+      const verificationToken = crypto.randomBytes(32).toString("hex");
+      const verificationTokenExpiresAt = new Date();
+      verificationTokenExpiresAt.setHours(verificationTokenExpiresAt.getHours() + 24); // 24 hour expiry
+
+      // Create new user account
+      const newUser = new User({
+        name: quote.contactName,
+        email: quote.email,
+        password: hashedPassword,
+        role: "customer",
+        isVerified: false,
+        verificationToken,
+        verificationTokenExpiresAt,
+      });
+
+      await newUser.save();
+
+      // Update quote status to completed
+      quote.status = "completed";
+      quote.completedDate = new Date();
+      await quote.save();
+
+      // Send welcome email with verification link
+      try {
+        const verificationLink = `${process.env.FRONTEND_URL || "http://localhost:3000"}/verify-email?token=${verificationToken}`;
+        const welcomeHtml = `
+          <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+            <h2 style="color: #7a4b25;">Welcome to Doyle's Coffee, ${quote.contactName}!</h2>
+            <p>Your customer account has been created. Please verify your email to activate your account.</p>
+            <p>
+              <a href="${verificationLink}" style="display: inline-block; padding: 10px 20px; background-color: #7a4b25; color: white; text-decoration: none; border-radius: 5px;">
+                Verify Email
+              </a>
+            </p>
+            <p style="font-size: 12px; color: #999;">If you did not create this account, please contact support.</p>
+          </div>
+        `;
+
+        await sendEmail({
+          to: quote.email,
+          subject: "Welcome to Doyle's Coffee - Verify Your Email",
+          html: welcomeHtml,
+        });
+      } catch (emailError) {
+        console.error("Failed to send welcome email:", emailError);
+        // Don't fail the request if email fails
+      }
+
+      res.status(201).json({
+        message: "Customer account created successfully",
+        user: {
+          id: newUser._id,
+          name: newUser.name,
+          email: newUser.email,
+          role: newUser.role,
+        },
+        quote: {
+          id: quote._id,
+          status: quote.status,
+        },
+      });
+    } catch (err) {
+      console.error("CONVERT QUOTE ERROR:", err);
+      res.status(500).json({ message: "Failed to convert quote to customer account" });
     }
   }
 );
