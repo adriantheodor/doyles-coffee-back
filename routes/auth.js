@@ -8,6 +8,8 @@ const User = require("../models/User");
 const RefreshToken = require("../models/RefreshToken");
 const { authenticateToken, requireRole } = require("../middleware/auth");
 const { sendVerificationEmail } = require("../utils/sendEmail");
+const { loginLimiter, signupLimiter, passwordResetLimiter, verificationEmailLimiter } = require("../middleware/rateLimiter");
+const { logAudit, getClientIp } = require("../utils/auditLogger");
 
 // =========================
 // 🔐 ENV + SECURITY SECTION
@@ -65,16 +67,31 @@ const changePassword = async (req, res) => {
 // 👤 REGISTER (Public)
 // =========================
 
-router.post("/register", async (req, res) => {
+router.post("/register", signupLimiter, async (req, res) => {
   const { name, email, password } = req.body;
+  const ipAddress = getClientIp(req);
 
   if (!name || !email || !password)
     return res.status(400).json({ message: "Missing fields" });
 
   try {
     const existingUser = await User.findOne({ email });
-    if (existingUser)
+    if (existingUser) {
+      // Log failed registration attempt (user already exists)
+      await logAudit({
+        userEmail: email,
+        action: "REGISTER",
+        resourceType: "User",
+        method: "POST",
+        endpoint: "/api/auth/register",
+        ipAddress,
+        userAgent: req.get("user-agent"),
+        status: "FAILURE",
+        statusCode: 400,
+        description: "Registration attempt with existing email",
+      });
       return res.status(400).json({ message: "User already exists" });
+    }
 
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(password, salt);
@@ -96,6 +113,24 @@ router.post("/register", async (req, res) => {
 
     await newUser.save();
 
+    // Log successful registration
+    await logAudit({
+      userId: newUser._id,
+      userEmail: newUser.email,
+      userRole: "customer",
+      action: "REGISTER",
+      resourceType: "User",
+      resourceId: newUser._id,
+      resourceName: `User: ${newUser.name}`,
+      method: "POST",
+      endpoint: "/api/auth/register",
+      ipAddress,
+      userAgent: req.get("user-agent"),
+      status: "SUCCESS",
+      statusCode: 201,
+      description: "New user registration",
+    });
+
     // Send verification email
     try {
       await sendVerificationEmail(newUser, verificationToken);
@@ -111,6 +146,22 @@ router.post("/register", async (req, res) => {
     }
   } catch (err) {
     console.error("REGISTRATION ERROR:", err);
+
+    // Log registration error
+    await logAudit({
+      userEmail: email,
+      action: "REGISTER",
+      resourceType: "User",
+      method: "POST",
+      endpoint: "/api/auth/register",
+      ipAddress,
+      userAgent: req.get("user-agent"),
+      status: "FAILURE",
+      statusCode: 500,
+      errorMessage: err.message,
+      description: "Registration error",
+    });
+
     res.status(500).json({ message: "Server error during registration" });
   }
 });
@@ -173,19 +224,65 @@ router.post("/refresh", async (req, res) => {
 // 📬 VERIFY EMAIL (New Route)
 // =========================
 router.post("/verify-email", async (req, res) => {
-  const { token } = req.body; // Frontend sends this from the URL query param
+  const { token } = req.body;
+  const ipAddress = getClientIp(req);
 
-  if (!token) return res.status(400).json({ message: "No token provided" });
+  if (!token) {
+    // Log failed verification attempt
+    await logAudit({
+      action: "VERIFY_EMAIL",
+      resourceType: "Auth",
+      method: "POST",
+      endpoint: "/api/auth/verify-email",
+      ipAddress,
+      userAgent: req.get("user-agent"),
+      status: "FAILURE",
+      statusCode: 400,
+      description: "Email verification attempt with no token",
+    });
+
+    return res.status(400).json({ message: "No token provided" });
+  }
 
   try {
     const user = await User.findOne({ verificationToken: token });
 
     if (!user) {
+      // Log failed verification attempt (invalid token)
+      await logAudit({
+        action: "VERIFY_EMAIL",
+        resourceType: "Auth",
+        method: "POST",
+        endpoint: "/api/auth/verify-email",
+        ipAddress,
+        userAgent: req.get("user-agent"),
+        status: "FAILURE",
+        statusCode: 400,
+        description: "Email verification attempt with invalid token",
+      });
+
       return res.status(400).json({ message: "Invalid or expired token" });
     }
 
     // Check token expiration
     if (user.verificationTokenExpiresAt && new Date() > user.verificationTokenExpiresAt) {
+      // Log failed verification attempt (expired token)
+      await logAudit({
+        userId: user._id,
+        userEmail: user.email,
+        userRole: user.role,
+        action: "VERIFY_EMAIL",
+        resourceType: "Auth",
+        resourceId: user._id,
+        method: "POST",
+        endpoint: "/api/auth/verify-email",
+        ipAddress,
+        userAgent: req.get("user-agent"),
+        status: "FAILURE",
+        statusCode: 400,
+        description: "Email verification attempt with expired token",
+      });
+
       return res.status(400).json({ message: "Verification token has expired" });
     }
 
@@ -193,12 +290,44 @@ router.post("/verify-email", async (req, res) => {
     user.isVerified = true;
     user.verificationToken = undefined;
     user.verificationTokenExpiresAt = undefined;
-    user.verificationEmailResendCount = 0; // Reset resend count after successful verification
+    user.verificationEmailResendCount = 0;
     await user.save();
+
+    // Log successful email verification
+    await logAudit({
+      userId: user._id,
+      userEmail: user.email,
+      userRole: user.role,
+      action: "VERIFY_EMAIL",
+      resourceType: "Auth",
+      resourceId: user._id,
+      method: "POST",
+      endpoint: "/api/auth/verify-email",
+      ipAddress,
+      userAgent: req.get("user-agent"),
+      status: "SUCCESS",
+      statusCode: 200,
+      description: "Email verification successful",
+    });
 
     res.json({ message: "Email verified successfully! You can now log in." });
   } catch (err) {
     console.error(err);
+
+    // Log verification error
+    await logAudit({
+      action: "VERIFY_EMAIL",
+      resourceType: "Auth",
+      method: "POST",
+      endpoint: "/api/auth/verify-email",
+      ipAddress,
+      userAgent: req.get("user-agent"),
+      status: "FAILURE",
+      statusCode: 500,
+      errorMessage: err.message,
+      description: "Email verification server error",
+    });
+
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -211,10 +340,24 @@ const RESEND_MAX_ATTEMPTS = 3;
 const RESEND_WINDOW_MINUTES = 15;
 const TOKEN_EXPIRES_HOURS = 24;
 
-router.post("/resend-verification-email", async (req, res) => {
+router.post("/resend-verification-email", verificationEmailLimiter, async (req, res) => {
   const { email } = req.body;
+  const ipAddress = getClientIp(req);
 
   if (!email) {
+    // Log missing email error
+    await logAudit({
+      action: "RESEND_EMAIL",
+      resourceType: "Auth",
+      method: "POST",
+      endpoint: "/api/auth/resend-verification-email",
+      ipAddress,
+      userAgent: req.get("user-agent"),
+      status: "FAILURE",
+      statusCode: 400,
+      description: "Resend email attempt with no email provided",
+    });
+
     return res.status(400).json({ message: "Email is required" });
   }
 
@@ -225,11 +368,42 @@ router.post("/resend-verification-email", async (req, res) => {
     const successMessage = "If an unverified account exists with this email, a verification email has been sent.";
 
     if (!user) {
+      // Log resend attempt for non-existent user (don't log actual failure for security)
+      await logAudit({
+        userEmail: email,
+        action: "RESEND_EMAIL",
+        resourceType: "Auth",
+        method: "POST",
+        endpoint: "/api/auth/resend-verification-email",
+        ipAddress,
+        userAgent: req.get("user-agent"),
+        status: "SUCCESS",
+        statusCode: 200,
+        description: "Resend email request (user not found - generic response)",
+      });
+
       return res.status(200).json({ message: successMessage });
     }
 
     // If already verified, return success (don't reveal status)
     if (user.isVerified) {
+      // Log resend attempt for already verified user
+      await logAudit({
+        userId: user._id,
+        userEmail: user.email,
+        userRole: user.role,
+        action: "RESEND_EMAIL",
+        resourceType: "Auth",
+        resourceId: user._id,
+        method: "POST",
+        endpoint: "/api/auth/resend-verification-email",
+        ipAddress,
+        userAgent: req.get("user-agent"),
+        status: "SUCCESS",
+        statusCode: 200,
+        description: "Resend email request for already verified user",
+      });
+
       return res.status(200).json({ message: successMessage });
     }
 
@@ -243,6 +417,24 @@ router.post("/resend-verification-email", async (req, res) => {
       // Check if within the resend window and exceeded max attempts
       if (minutesSinceLastResend < RESEND_WINDOW_MINUTES && user.verificationEmailResendCount >= RESEND_MAX_ATTEMPTS) {
         console.warn(`⚠️ Rate limit exceeded for user: ${email}`);
+
+        // Log rate limit hit (but return generic success for security)
+        await logAudit({
+          userId: user._id,
+          userEmail: user.email,
+          userRole: user.role,
+          action: "RESEND_EMAIL",
+          resourceType: "Auth",
+          resourceId: user._id,
+          method: "POST",
+          endpoint: "/api/auth/resend-verification-email",
+          ipAddress,
+          userAgent: req.get("user-agent"),
+          status: "FAILURE",
+          statusCode: 200,
+          description: "Rate limit exceeded for resend email",
+        });
+
         return res.status(200).json({ message: successMessage }); // Return success anyway for security
       }
 
@@ -280,11 +472,44 @@ router.post("/resend-verification-email", async (req, res) => {
         // Don't throw - email service failures shouldn't fail the request
       });
 
+    // Log successful resend email
+    await logAudit({
+      userId: user._id,
+      userEmail: user.email,
+      userRole: user.role,
+      action: "RESEND_EMAIL",
+      resourceType: "Auth",
+      resourceId: user._id,
+      method: "POST",
+      endpoint: "/api/auth/resend-verification-email",
+      ipAddress,
+      userAgent: req.get("user-agent"),
+      status: "SUCCESS",
+      statusCode: 200,
+      description: "Verification email resent successfully",
+    });
+
     // Return success message regardless of email status
     res.status(200).json({ message: successMessage });
 
   } catch (err) {
     console.error("RESEND VERIFICATION EMAIL ERROR:", err);
+
+    // Log resend email error
+    await logAudit({
+      userEmail: email,
+      action: "RESEND_EMAIL",
+      resourceType: "Auth",
+      method: "POST",
+      endpoint: "/api/auth/resend-verification-email",
+      ipAddress,
+      userAgent: req.get("user-agent"),
+      status: "FAILURE",
+      statusCode: 500,
+      errorMessage: err.message,
+      description: "Resend email server error",
+    });
+
     // Return generic success for security
     res.status(200).json({ message: "If an unverified account exists with this email, a verification email has been sent." });
   }
@@ -293,29 +518,79 @@ router.post("/resend-verification-email", async (req, res) => {
 // =========================
 // 🔐 LOGIN
 // =========================
-router.post("/login", async (req, res) => {
+router.post("/login", loginLimiter, async (req, res) => {
   const { email, password } = req.body;
+  const ipAddress = getClientIp(req);
+  
   try {
     const user = await User.findOne({ email });
     if (!user) {
+      // Log failed login attempt
+      await logAudit({
+        userEmail: email,
+        action: "FAILED_LOGIN",
+        resourceType: "Auth",
+        method: "POST",
+        endpoint: "/api/auth/login",
+        ipAddress,
+        userAgent: req.get("user-agent"),
+        status: "FAILURE",
+        statusCode: 401,
+        description: "Login attempt with non-existent email",
+      });
+
       return res.status(401).json({ 
         message: "Invalid credentials",
         code: "INVALID_CREDENTIALS",
-        field: null // Don't reveal which field failed
+        field: null
       });
     }
 
     const passwordMatches = await bcrypt.compare(password, user.password);
     if (!passwordMatches) {
+      // Log failed login attempt (wrong password)
+      await logAudit({
+        userId: user._id,
+        userEmail: user.email,
+        userRole: user.role,
+        action: "FAILED_LOGIN",
+        resourceType: "Auth",
+        resourceId: user._id,
+        method: "POST",
+        endpoint: "/api/auth/login",
+        ipAddress,
+        userAgent: req.get("user-agent"),
+        status: "FAILURE",
+        statusCode: 401,
+        description: "Login attempt with incorrect password",
+      });
+
       return res.status(401).json({ 
         message: "Invalid credentials",
         code: "INVALID_CREDENTIALS",
-        field: null // Don't reveal which field failed
+        field: null
       });
     }
 
     // Check if email is verified
     if (!user.isVerified) {
+      // Log unverified account login attempt
+      await logAudit({
+        userId: user._id,
+        userEmail: user.email,
+        userRole: user.role,
+        action: "FAILED_LOGIN",
+        resourceType: "Auth",
+        resourceId: user._id,
+        method: "POST",
+        endpoint: "/api/auth/login",
+        ipAddress,
+        userAgent: req.get("user-agent"),
+        status: "FAILURE",
+        statusCode: 403,
+        description: "Login attempt with unverified email",
+      });
+
       return res.status(403).json({ 
         message: "Please verify your email before logging in",
         code: "UNVERIFIED_ACCOUNT",
@@ -338,7 +613,23 @@ router.post("/login", async (req, res) => {
       expiresAt,
     }).save();
 
-    // ✅ FIXED: Used 'refreshString' instead of 'refreshToken'
+    // Log successful login
+    await logAudit({
+      userId: user._id,
+      userEmail: user.email,
+      userRole: user.role,
+      action: "LOGIN",
+      resourceType: "Auth",
+      resourceId: user._id,
+      method: "POST",
+      endpoint: "/api/auth/login",
+      ipAddress,
+      userAgent: req.get("user-agent"),
+      status: "SUCCESS",
+      statusCode: 200,
+      description: "Successful login",
+    });
+
     res.cookie("refreshToken", refreshString, {
       httpOnly: true,
       secure: true,
@@ -358,6 +649,22 @@ router.post("/login", async (req, res) => {
     });
   } catch (err) {
     console.error("LOGIN ERROR:", err);
+
+    // Log login error
+    await logAudit({
+      userEmail: email,
+      action: "FAILED_LOGIN",
+      resourceType: "Auth",
+      method: "POST",
+      endpoint: "/api/auth/login",
+      ipAddress,
+      userAgent: req.get("user-agent"),
+      status: "FAILURE",
+      statusCode: 500,
+      errorMessage: err.message,
+      description: "Login server error",
+    });
+
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -437,6 +744,8 @@ router.get("/check-auth", async (req, res) => {
 // �🚪 LOGOUT
 // =========================
 router.post("/logout", authenticateToken, async (req, res) => {
+  const ipAddress = getClientIp(req);
+
   try {
     const refreshString = req.cookies?.refreshToken;
 
@@ -445,6 +754,22 @@ router.post("/logout", authenticateToken, async (req, res) => {
     }
 
     await RefreshToken.deleteMany({ user: req.user.id });
+
+    // Log successful logout
+    await logAudit({
+      userId: req.user.id,
+      userRole: req.user.role,
+      action: "LOGOUT",
+      resourceType: "Auth",
+      resourceId: req.user.id,
+      method: "POST",
+      endpoint: "/api/auth/logout",
+      ipAddress,
+      userAgent: req.get("user-agent"),
+      status: "SUCCESS",
+      statusCode: 200,
+      description: "User logout",
+    });
 
     res.clearCookie("refreshToken", {
       httpOnly: true,
@@ -456,6 +781,24 @@ router.post("/logout", authenticateToken, async (req, res) => {
     res.json({ message: "Logged out" });
   } catch (err) {
     console.error("LOGOUT ERROR:", err);
+
+    // Log logout error
+    await logAudit({
+      userId: req.user.id,
+      userRole: req.user.role,
+      action: "LOGOUT",
+      resourceType: "Auth",
+      resourceId: req.user.id,
+      method: "POST",
+      endpoint: "/api/auth/logout",
+      ipAddress,
+      userAgent: req.get("user-agent"),
+      status: "FAILURE",
+      statusCode: 500,
+      errorMessage: err.message,
+      description: "Logout server error",
+    });
+
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -488,5 +831,79 @@ router.get("/me", authenticateToken, async (req, res) => {
 // �🔒 CHANGE PASSWORD ROUTE
 // =========================
 router.post("/change-password", authenticateToken, changePassword);
+// =========================
+// 📋 AUDIT LOG ENDPOINTS (Admin Only)
+// =========================
+const { getAuditLogs, getUserActivity, getResourceHistory } = require("../utils/auditLogger");
 
+// Get all audit logs with filtering
+router.get("/admin/audit-logs", authenticateToken, requireRole("admin"), async (req, res) => {
+  try {
+    const { userId, action, resourceType, resourceId, startDate, endDate, limit = 100, skip = 0 } = req.query;
+
+    const filters = {
+      limit: parseInt(limit),
+      skip: parseInt(skip),
+    };
+
+    if (userId) filters.userId = userId;
+    if (action) filters.action = action;
+    if (resourceType) filters.resourceType = resourceType;
+    if (resourceId) filters.resourceId = resourceId;
+    if (startDate) filters.startDate = startDate;
+    if (endDate) filters.endDate = endDate;
+
+    const { logs, total } = await getAuditLogs(filters);
+
+    res.json({
+      success: true,
+      data: logs,
+      pagination: {
+        total,
+        limit: filters.limit,
+        skip: filters.skip,
+        pages: Math.ceil(total / filters.limit),
+      },
+    });
+  } catch (err) {
+    console.error("Error fetching audit logs:", err);
+    res.status(500).json({ success: false, message: "Error fetching audit logs" });
+  }
+});
+
+// Get activity history for a specific user
+router.get("/admin/audit-logs/user/:userId", authenticateToken, requireRole("admin"), async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { limit = 50 } = req.query;
+
+    const logs = await getUserActivity(userId, parseInt(limit));
+
+    res.json({
+      success: true,
+      data: logs,
+    });
+  } catch (err) {
+    console.error("Error fetching user activity:", err);
+    res.status(500).json({ success: false, message: "Error fetching user activity" });
+  }
+});
+
+// Get resource history (what changes were made to a resource)
+router.get("/admin/audit-logs/resource/:resourceType/:resourceId", authenticateToken, requireRole("admin"), async (req, res) => {
+  try {
+    const { resourceType, resourceId } = req.params;
+    const { limit = 50 } = req.query;
+
+    const logs = await getResourceHistory(resourceType, resourceId, parseInt(limit));
+
+    res.json({
+      success: true,
+      data: logs,
+    });
+  } catch (err) {
+    console.error("Error fetching resource history:", err);
+    res.status(500).json({ success: false, message: "Error fetching resource history" });
+  }
+});
 module.exports = router;

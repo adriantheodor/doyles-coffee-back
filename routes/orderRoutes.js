@@ -5,9 +5,10 @@ const Order = require("../models/Order");
 const Product = require("../models/Product");
 const Invoice = require("../models/Invoice");
 const { authenticateToken, requireRole } = require("../middleware/auth");
+const { createUpdateLimiter } = require("../middleware/rateLimiter");
 
 // CREATE new order (customer)
-router.post("/", authenticateToken, async (req, res) => {
+router.post("/", authenticateToken, createUpdateLimiter, async (req, res) => {
   try {
     const { items, notes } = req.body;
 

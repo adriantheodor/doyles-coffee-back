@@ -5,6 +5,7 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
+const { globalLimiter } = require("./middleware/rateLimiter");
 
 // ✅ Force dotenv to load from the same folder as this file
 dotenv.config({ path: path.resolve(__dirname, ".env") });
@@ -53,6 +54,9 @@ app.use(
 
 app.use(express.json());
 app.use(cookieParser());
+
+// ✅ Apply global rate limiting to all routes (except health check)
+app.use(globalLimiter);
 
 // Serve uploaded files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));

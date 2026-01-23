@@ -3,9 +3,10 @@ const express = require("express");
 const router = express.Router();
 const IssueReport = require("../models/IssueReport");
 const { authenticateToken, requireRole } = require("../middleware/auth");
+const { createUpdateLimiter } = require("../middleware/rateLimiter");
 
 // CREATE issue (customer)
-router.post("/", authenticateToken, async (req, res) => {
+router.post("/", authenticateToken, createUpdateLimiter, async (req, res) => {
   try {
     const issue = new IssueReport({
       customer: req.user.id,

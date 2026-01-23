@@ -7,6 +7,7 @@ const invoiceController = require("../controllers/invoiceController");
 const upload = require("../config/multer");
 const PDFDocument = require("pdfkit");
 const { authenticateToken, requireRole } = require("../middleware/auth");
+const { createUpdateLimiter, uploadLimiter } = require("../middleware/rateLimiter");
 
 // ================================
 // FILE UPLOAD & SENDING ENDPOINTS
@@ -17,6 +18,7 @@ router.post(
   "/upload",
   authenticateToken,
   requireRole("admin"),
+  uploadLimiter,
   upload.single("invoice"),
   invoiceController.uploadInvoice
 );
@@ -26,6 +28,7 @@ router.post(
   "/:id/send",
   authenticateToken,
   requireRole("admin"),
+  createUpdateLimiter,
   invoiceController.sendInvoiceToCustomer
 );
 

@@ -3,6 +3,7 @@ const express = require("express");
 const router = express.Router();
 const Product = require("../models/Product");
 const { authenticateToken, requireRole } = require("../middleware/auth");
+const { createUpdateLimiter } = require("../middleware/rateLimiter");
 
 // GET all products (public)
 router.get("/", async (req, res) => {
@@ -26,7 +27,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // CREATE new product (admin only)
-router.post("/", authenticateToken, requireRole("admin"), async (req, res) => {
+router.post("/", authenticateToken, requireRole("admin"), createUpdateLimiter, async (req, res) => {
   try {
     const { name, price, stock, description } = req.body;
 

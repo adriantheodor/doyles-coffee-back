@@ -6,9 +6,10 @@ const QuoteRequest = require("../models/QuoteRequest");
 const User = require("../models/User");
 const { authenticateToken, requireRole } = require("../middleware/auth");
 const { sendEmail, generateICS, sendVerificationEmail } = require("../utils/sendEmail");
+const { createUpdateLimiter } = require("../middleware/rateLimiter");
 
 // Create a new quote request
-router.post("/", async (req, res) => {
+router.post("/", createUpdateLimiter, async (req, res) => {
   try {
     const qr = await QuoteRequest.create(req.body);
 
