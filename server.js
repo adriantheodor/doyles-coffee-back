@@ -29,6 +29,9 @@ if (!process.env.MONGO_URI) {
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// ✅ Trust proxy for X-Forwarded-For headers (required for rate limiting behind reverse proxy)
+app.set('trust proxy', 1);
+
 app.use(helmet());
 
 const allowedOrigins = [

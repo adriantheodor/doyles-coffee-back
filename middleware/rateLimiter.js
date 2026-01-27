@@ -11,6 +11,7 @@ const globalLimiter = rateLimit({
   message: "Too many requests from this IP, please try again later.",
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  trustProxy: true, // Trust X-Forwarded-For header from reverse proxy
   skip: (req) => {
     // Skip rate limiting for health check
     return req.path === "/";
@@ -28,6 +29,7 @@ const loginLimiter = rateLimit({
   message: "Too many login attempts, please try again after 15 minutes.",
   standardHeaders: true,
   legacyHeaders: false,
+  trustProxy: true, // Trust X-Forwarded-For header from reverse proxy
   skipSuccessfulRequests: true, // Don't count successful requests
 });
 
@@ -38,6 +40,7 @@ const signupLimiter = rateLimit({
   message: "Too many accounts created from this IP, please try again after an hour.",
   standardHeaders: true,
   legacyHeaders: false,
+  trustProxy: true, // Trust X-Forwarded-For header from reverse proxy
 });
 
 // Limiter for password reset requests
@@ -47,6 +50,7 @@ const passwordResetLimiter = rateLimit({
   message: "Too many password reset attempts, please try again after 15 minutes.",
   standardHeaders: true,
   legacyHeaders: false,
+  trustProxy: true, // Trust X-Forwarded-For header from reverse proxy
 });
 
 // Limiter for verification email resends
@@ -56,6 +60,7 @@ const verificationEmailLimiter = rateLimit({
   message: "Too many verification email requests, please try again after 15 minutes.",
   standardHeaders: true,
   legacyHeaders: false,
+  trustProxy: true, // Trust X-Forwarded-For header from reverse proxy
 });
 
 // =====================================================
@@ -69,6 +74,7 @@ const createUpdateLimiter = rateLimit({
   message: "Too many create/update requests, please try again after a minute.",
   standardHeaders: true,
   legacyHeaders: false,
+  trustProxy: true, // Trust X-Forwarded-For header from reverse proxy
 });
 
 // Limiter for file uploads
@@ -78,6 +84,7 @@ const uploadLimiter = rateLimit({
   message: "Too many file uploads, please try again after an hour.",
   standardHeaders: true,
   legacyHeaders: false,
+  trustProxy: true, // Trust X-Forwarded-For header from reverse proxy
 });
 
 module.exports = {

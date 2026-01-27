@@ -92,10 +92,8 @@ const inventoryItemSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Index for faster lookups
+// Index for faster lookups (avoid duplicates with unique: true fields above)
 inventoryItemSchema.index({ productId: 1, status: 1 });
-inventoryItemSchema.index({ qrCode: 1 });
-inventoryItemSchema.index({ itemCode: 1 });
 inventoryItemSchema.index({ batchNumber: 1 });
 
 module.exports = mongoose.model('InventoryItem', inventoryItemSchema);
