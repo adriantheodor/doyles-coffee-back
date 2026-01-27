@@ -20,6 +20,18 @@ const productSchema = new mongoose.Schema({
     required: true,
     default: 0
   },
-});
+  // QR code tracking enabled for this product
+  qrTrackingEnabled: {
+    type: Boolean,
+    default: false,
+  },
+  // SKU for QR code generation
+  sku: {
+    type: String,
+    unique: true,
+    sparse: true,
+    trim: true,
+  },
+}, { timestamps: true });
 
 module.exports = mongoose.model('Product', productSchema);
