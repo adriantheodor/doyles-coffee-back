@@ -4,8 +4,15 @@ const router = express.Router();
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 const Invoice = require("../models/Invoice");
+const User = require("../models/User");
 const { authenticateToken, requireRole } = require("../middleware/auth");
 const { createUpdateLimiter } = require("../middleware/rateLimiter");
+const { sendEmail } = require("../utils/sendEmail");
+
+const adminRecipients = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "admin@doyles.com")
+  .split(",")
+  .map((e) => e.trim())
+  .filter(Boolean);
 
 // CREATE new order (customer)
 router.post("/", authenticateToken, createUpdateLimiter, async (req, res) => {
@@ -36,6 +43,43 @@ router.post("/", authenticateToken, createUpdateLimiter, async (req, res) => {
     });
 
     await order.save();
+
+    // Send admin notification email (non-blocking)
+    try {
+      const customer = await User.findById(req.user.id).select("name email");
+      const lineItemsHtml = items
+        .map((item) => {
+          const product = products.find((p) => p._id.toString() === item.product);
+          const productName = product ? product.name : "Unknown Product";
+          const productPrice = product ? Number(product.price) : 0;
+          const lineTotal = productPrice * item.quantity;
+
+          return `<li>${productName} — Qty: ${item.quantity} — $${lineTotal.toFixed(2)}</li>`;
+        })
+        .join("");
+
+      const adminHtml = `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+          <h2>New Order Submitted</h2>
+          <p><strong>Order ID:</strong> ${order._id}</p>
+          <p><strong>Customer:</strong> ${customer?.name || "Unknown"}</p>
+          <p><strong>Customer Email:</strong> ${customer?.email || "Unknown"}</p>
+          <p><strong>Total:</strong> $${Number(totalPrice).toFixed(2)}</p>
+          ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ""}
+          <p><strong>Items:</strong></p>
+          <ul>${lineItemsHtml}</ul>
+        </div>
+      `;
+
+      await sendEmail({
+        to: adminRecipients,
+        subject: "New Order Submitted",
+        html: adminHtml,
+      });
+    } catch (emailError) {
+      console.error("Failed to send admin order notification:", emailError);
+      // Don't fail order creation if email fails
+    }
 
     res.status(201).json(order);
   } catch (err) {

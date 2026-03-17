@@ -8,6 +8,11 @@ const { authenticateToken, requireRole } = require("../middleware/auth");
 const { sendEmail, generateICS, sendVerificationEmail } = require("../utils/sendEmail");
 const { createUpdateLimiter } = require("../middleware/rateLimiter");
 
+const adminRecipients = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "admin@doyles.com")
+  .split(",")
+  .map((e) => e.trim())
+  .filter(Boolean);
+
 // Create a new quote request
 router.post("/", createUpdateLimiter, async (req, res) => {
   try {
@@ -16,7 +21,7 @@ router.post("/", createUpdateLimiter, async (req, res) => {
     // Send admin notification email
     try {
       await sendEmail({
-        to: process.env.ADMIN_EMAIL || "admin@doyles.com",
+        to: adminRecipients,
         subject: "New Quote Request",
         html: `
           <div style="font-family: Arial, sans-serif; padding: 20px;">
@@ -190,7 +195,7 @@ router.put(
 `;
 
       await sendEmail({
-        to: process.env.ADMIN_EMAIL || process.env.SMTP_USER,
+        to: adminRecipients,
         subject: `Consultation Scheduled with ${quote.companyName}`,
         html: adminHtml,
         ics,

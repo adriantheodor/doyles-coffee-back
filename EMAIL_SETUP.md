@@ -46,8 +46,13 @@ RESEND_API_KEY=re_your_api_key_here
 FROM_EMAIL=noreply@yourdomain.com
 EMAIL_FROM_NAME=Doyle's Coffee
 FRONTEND_URL=https://your-frontend-domain.com
-ADMIN_EMAIL=admin@doyles.com
+ADMIN_EMAILS=admin1@doyles.com,admin2@doyles.com
+# Backward-compatible fallback:
+# ADMIN_EMAIL=admin@doyles.com
 ```
+
+`ADMIN_EMAILS` is preferred and supports multiple recipients (comma-separated).
+If `ADMIN_EMAILS` is not set, the system falls back to `ADMIN_EMAIL`.
 
 ### 3. Install Dependencies
 ```bash
@@ -76,6 +81,11 @@ Push changes and redeploy your backend.
 - **Route:** `POST /api/quotes`
 - **Emails Sent:**
   - ✅ Admin (notification of new lead)
+
+### New Order Submission
+- **Route:** `POST /api/orders`
+- **Emails Sent:**
+  - ✅ Admin (notification of new customer order)
 
 ## Testing
 

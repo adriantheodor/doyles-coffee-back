@@ -23,4 +23,5 @@ Cookie domain: .doylesbreakroomservices.com
 - `FRONTEND_URL` - Frontend URL for email verification links
 
 **Admin Notifications:**
-- `ADMIN_EMAIL` - Email address for admin notifications
+- `ADMIN_EMAILS` - Comma-separated email addresses for admin notifications (preferred)
+- `ADMIN_EMAIL` - Backward-compatible fallback single admin email
