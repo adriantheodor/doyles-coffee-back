@@ -906,4 +906,63 @@ router.get("/admin/audit-logs/resource/:resourceType/:resourceId", authenticateT
     res.status(500).json({ success: false, message: "Error fetching resource history" });
   }
 });
+
+router.post("/create-admin", authenticateToken, requireRole("admin"), async (req, res) => {
+  const { name, email, password } = req.body;
+  const ipAddress = getClientIp(req);
+
+  if (!name || !email || !password)
+    return res.status(400).json({ message: "Missing fields" });
+
+  try {
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: "User already exists" });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash(password, salt);
+
+    const newAdmin = new User({
+      name,
+      email,
+      password: hash,
+      role: "admin",
+      isVerified: true, // Admins are pre-verified
+    });
+
+    await newAdmin.save();
+
+    await logAudit({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      action: "CREATE_ADMIN",
+      resourceType: "User",
+      resourceId: newAdmin._id,
+      resourceName: `Admin: ${newAdmin.name}`,
+      method: "POST",
+      endpoint: "/api/auth/create-admin",
+      ipAddress,
+      userAgent: req.get("user-agent"),
+      status: "SUCCESS",
+      statusCode: 201,
+      description: `New admin account created for ${newAdmin.email}`,
+    });
+
+    res.status(201).json({
+      message: "Admin created successfully",
+      user: {
+        id: newAdmin._id,
+        name: newAdmin.name,
+        email: newAdmin.email,
+        role: newAdmin.role,
+      },
+    });
+  } catch (err) {
+    console.error("CREATE ADMIN ERROR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 module.exports = router;
