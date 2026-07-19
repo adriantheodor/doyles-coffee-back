@@ -74,6 +74,7 @@ const issueReportRoutes = require("./routes/issueReportRoutes");
 const quoteRoutes = require("./routes/quoteRoutes");
 const inventoryRoutes = require("./routes/inventoryRoutes");
 const imageRoutes = require("./routes/imageRoutes");
+const onDemandOrderRoutes = require("./routes/onDemandOrderRoutes");
 
 app.use("/api/auth", authRoutes);
 
@@ -84,6 +85,7 @@ app.use("/api/inventory", inventoryRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/quotes", quoteRoutes);
 app.use("/api/images", imageRoutes);
+app.use("/api/on-demand-orders", onDemandOrderRoutes);
 
 // ✅ Default route for health check
 app.get("/", (req, res) => {
