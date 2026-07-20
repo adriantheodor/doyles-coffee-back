@@ -3,6 +3,12 @@ const router = express.Router();
 const OnDemandOrder = require('../models/OnDemandOrder');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { createUpdateLimiter } = require('../middleware/rateLimiter');
+const { sendEmail } = require('../utils/sendEmail');
+
+const adminRecipients = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || 'admin@doyles.com')
+  .split(',')
+  .map((e) => e.trim())
+  .filter(Boolean);
 
 const getDateValidationErrors = (fieldName, value) => {
   const errors = [];
@@ -84,6 +90,28 @@ router.post('/', createUpdateLimiter, async (req, res) => {
     });
 
     await onDemandOrder.save();
+
+    try {
+      const deliveryDateText = parsedDeliveryDate ? new Date(parsedDeliveryDate).toLocaleString() : 'Not provided';
+      const html = `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+          <h2>New On-Demand Order Submitted</h2>
+          <p><strong>Company:</strong> ${onDemandOrder.companyName}</p>
+          <p><strong>Jug Count:</strong> ${onDemandOrder.jugCount ?? 'Not provided'}</p>
+          <p><strong>Delivery Date:</strong> ${deliveryDateText}</p>
+          ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ''}
+          <p><strong>Requested At:</strong> ${new Date(onDemandOrder.createdAt).toLocaleString()}</p>
+        </div>
+      `;
+
+      await sendEmail({
+        to: adminRecipients,
+        subject: 'New On-Demand Order Submitted',
+        html,
+      });
+    } catch (emailError) {
+      console.error('Failed to send on-demand order notification:', emailError);
+    }
 
     return res.status(201).json(onDemandOrder);
   } catch (error) {
