@@ -16,7 +16,13 @@ const adminRecipients = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || 
 // Create a new quote request
 router.post("/", createUpdateLimiter, async (req, res) => {
   try {
-    const qr = await QuoteRequest.create(req.body);
+    const timestamp = req.body.timestamp || req.body.createdAt || new Date();
+    const qr = await QuoteRequest.create({
+      ...req.body,
+      timestamp,
+      createdAt: req.body.createdAt || timestamp,
+      updatedAt: req.body.updatedAt || timestamp,
+    });
 
     // Send admin notification email
     try {
@@ -37,7 +43,12 @@ router.post("/", createUpdateLimiter, async (req, res) => {
       // Don't fail the request if email fails
     }
 
-    res.status(201).json({ id: qr._id });
+    res.status(201).json({
+      id: qr._id,
+      timestamp: qr.timestamp,
+      createdAt: qr.createdAt,
+      updatedAt: qr.updatedAt,
+    });
   } catch (e) {
     console.error(e);
     res.status(400).json({ error: "Invalid quote payload" });
