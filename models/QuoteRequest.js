@@ -13,7 +13,7 @@ const QuoteRequestSchema = new mongoose.Schema(
     adminNotes: String,
     services: { type: [String], default: [] },
     notes: String,
-    timestamp: { type: Date, default: Date.now },
+    timestamp: { type: Date},
     status: {
       type: String,
       enum: ["new", "contacted", "scheduled", "closed", "completed"],
