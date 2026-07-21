@@ -24,6 +24,18 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  address: {
+    type: String,
+    default: "",
+  },
+  phoneNumber: {
+    type: String,
+    default: "",
+  },
+  companyName: {
+    type: String,
+    default: "",
+  },
   createdAt: {
     type: Date,
     default: Date.now,

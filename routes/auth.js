@@ -109,6 +109,9 @@ router.post("/register", signupLimiter, async (req, res) => {
       isVerified: false,
       verificationToken,
       verificationTokenExpiresAt,
+      address,
+      phoneNumber,
+      companyName,
     });
 
     await newUser.save();
@@ -911,7 +914,7 @@ router.get("/admin/audit-logs/resource/:resourceType/:resourceId", authenticateT
 router.get("/admin/users", authenticateToken, requireRole("admin"), async (req, res) => {
   try {
     const users = await User.find()
-      .select("name email role isVerified isActive")
+      .select("name email role isVerified isActive address phoneNumber companyName")
       .lean();
 
     const safeUsers = users.map((user) => ({
@@ -921,6 +924,9 @@ router.get("/admin/users", authenticateToken, requireRole("admin"), async (req, 
       role: user.role,
       isVerified: Boolean(user.isVerified),
       isActive: user.isActive !== false,
+      address: user.address || "",
+      phoneNumber: user.phoneNumber || "",
+      companyName: user.companyName || "",
     }));
 
     res.json({
@@ -933,8 +939,65 @@ router.get("/admin/users", authenticateToken, requireRole("admin"), async (req, 
   }
 });
 
+router.put("/admin/users/:id", authenticateToken, requireRole("admin"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      name,
+      email,
+      role,
+      isVerified,
+      isActive,
+      address,
+      phoneNumber,
+      companyName,
+    } = req.body;
+
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (email !== undefined) updates.email = email;
+    if (role !== undefined) updates.role = role;
+    if (isVerified !== undefined) updates.isVerified = isVerified;
+    if (isActive !== undefined) updates.isActive = isActive;
+    if (address !== undefined) updates.address = address;
+    if (phoneNumber !== undefined) updates.phoneNumber = phoneNumber;
+    if (companyName !== undefined) updates.companyName = companyName;
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ message: "No valid fields provided for update" });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(id, updates, {
+      new: true,
+      runValidators: true,
+    }).select("name email role isVerified isActive address phoneNumber companyName");
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: updatedUser._id.toString(),
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        isVerified: Boolean(updatedUser.isVerified),
+        isActive: updatedUser.isActive !== false,
+        address: updatedUser.address || "",
+        phoneNumber: updatedUser.phoneNumber || "",
+        companyName: updatedUser.companyName || "",
+      },
+    });
+  } catch (err) {
+    console.error("Error updating admin user:", err);
+    res.status(500).json({ success: false, message: "Failed to update user" });
+  }
+});
+
 router.post("/create-admin", authenticateToken, requireRole("admin"), async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, address = "", phoneNumber = "", companyName = "" } = req.body;
   const ipAddress = getClientIp(req);
 
   if (!name || !email || !password)
@@ -955,6 +1018,9 @@ router.post("/create-admin", authenticateToken, requireRole("admin"), async (req
       password: hash,
       role: "admin",
       isVerified: true, // Admins are pre-verified
+      address,
+      phoneNumber,
+      companyName,
     });
 
     await newAdmin.save();
