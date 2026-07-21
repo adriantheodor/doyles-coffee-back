@@ -907,6 +907,32 @@ router.get("/admin/audit-logs/resource/:resourceType/:resourceId", authenticateT
   }
 });
 
+// Get all users (admin only)
+router.get("/admin/users", authenticateToken, requireRole("admin"), async (req, res) => {
+  try {
+    const users = await User.find()
+      .select("name email role isVerified isActive")
+      .lean();
+
+    const safeUsers = users.map((user) => ({
+      id: user._id.toString(),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      isVerified: Boolean(user.isVerified),
+      isActive: user.isActive !== false,
+    }));
+
+    res.json({
+      success: true,
+      users: safeUsers,
+    });
+  } catch (err) {
+    console.error("Error fetching admin users:", err);
+    res.status(500).json({ success: false, message: "Failed to retrieve users" });
+  }
+});
+
 router.post("/create-admin", authenticateToken, requireRole("admin"), async (req, res) => {
   const { name, email, password } = req.body;
   const ipAddress = getClientIp(req);
