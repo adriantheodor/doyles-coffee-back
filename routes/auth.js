@@ -823,10 +823,55 @@ router.get("/me", authenticateToken, async (req, res) => {
       email: user.email,
       role: user.role,
       isVerified: user.isVerified,
+      isActive: user.isActive !== false,
+      address: user.address || "",
+      phoneNumber: user.phoneNumber || "",
+      companyName: user.companyName || "",
     });
   } catch (err) {
     console.error("GET ME ERROR:", err);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Update own profile (authenticated users)
+router.put("/me", authenticateToken, async (req, res) => {
+  try {
+    const { name, address, phoneNumber, companyName } = req.body;
+    const updates = {};
+
+    if (name !== undefined) updates.name = name;
+    if (address !== undefined) updates.address = address;
+    if (phoneNumber !== undefined) updates.phoneNumber = phoneNumber;
+    if (companyName !== undefined) updates.companyName = companyName;
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ message: "No valid fields provided for update" });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(req.user.id, updates, {
+      new: true,
+      runValidators: true,
+    }).select("-password");
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({
+      id: updatedUser._id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      role: updatedUser.role,
+      isVerified: updatedUser.isVerified,
+      isActive: updatedUser.isActive !== false,
+      address: updatedUser.address || "",
+      phoneNumber: updatedUser.phoneNumber || "",
+      companyName: updatedUser.companyName || "",
+    });
+  } catch (err) {
+    console.error("UPDATE ME ERROR:", err);
+    res.status(500).json({ message: "Failed to update profile" });
   }
 });
 
