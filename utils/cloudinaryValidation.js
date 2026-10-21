@@ -1,5 +1,26 @@
 const cloudinary = require("../config/cloudinary");
 
+function isCloudinaryImage(image) {
+  if (!image || typeof image !== "object") {
+    return false;
+  }
+
+  if (image.source === "cloudinary") {
+    return true;
+  }
+
+  const cloudinaryUrl = /res\.cloudinary\.com|cloudinary\.com/i;
+  if (typeof image.url === "string" && cloudinaryUrl.test(image.url)) {
+    return true;
+  }
+
+  if (typeof image.publicId === "string" && image.publicId.includes("doyles-images")) {
+    return true;
+  }
+
+  return false;
+}
+
 async function checkCloudinaryResourceExists(publicId) {
   if (!publicId || typeof publicId !== "string") {
     throw new Error("Missing Cloudinary publicId");
@@ -24,7 +45,7 @@ async function filterAccessibleImages(images, resourceChecker = checkCloudinaryR
   const validImages = [];
 
   for (const image of images) {
-    if (!image || !image.publicId) {
+    if (!image || !image.publicId || !isCloudinaryImage(image)) {
       continue;
     }
 
@@ -42,4 +63,5 @@ async function filterAccessibleImages(images, resourceChecker = checkCloudinaryR
 module.exports = {
   checkCloudinaryResourceExists,
   filterAccessibleImages,
+  isCloudinaryImage,
 };
