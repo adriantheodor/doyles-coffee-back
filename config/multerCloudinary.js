@@ -15,6 +15,7 @@ const storage = new CloudinaryStorage({
         .toLowerCase();
       return `${cleanName}-${timestamp}`;
     },
+    transformation: [{ quality: "auto" }, { fetch_format: "auto" }],
   },
 });
 

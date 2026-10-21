@@ -5,12 +5,22 @@ const Image = require("../models/Image");
 const cloudinary = require("../config/cloudinary");
 const upload = require("../config/multerCloudinary");
 const { authenticateToken, requireRole } = require("../middleware/auth");
+const { filterAccessibleImages } = require("../utils/cloudinaryValidation");
 
 // GET all images (public)
 router.get("/", async (req, res) => {
   try {
     const images = await Image.find().sort({ createdAt: -1 });
-    res.json(images);
+    const validImages = await filterAccessibleImages(images);
+    const invalidIds = images
+      .filter((image) => image && image._id && !validImages.some((validImage) => validImage._id.toString() === image._id.toString()))
+      .map((image) => image._id);
+
+    if (invalidIds.length > 0) {
+      await Image.deleteMany({ _id: { $in: invalidIds } });
+    }
+
+    res.json(validImages);
   } catch (err) {
     console.error("Error fetching images:", err);
     res.status(500).json({ message: "Error retrieving images" });
@@ -31,8 +41,8 @@ router.post(
 
       const { caption = "" } = req.body;
       const image = new Image({
-        url: req.file.path,
-        publicId: req.file.filename || req.file.public_id,
+        url: req.file.secure_url || req.file.path,
+        publicId: req.file.public_id || req.file.filename,
         caption,
         uploadedBy: req.user.id,
       });
