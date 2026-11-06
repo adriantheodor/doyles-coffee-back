@@ -1,6 +1,7 @@
 // routes/imageRoutes.js
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const Image = require("../models/Image");
 const cloudinary = require("../config/cloudinary");
 const upload = require("../config/multerCloudinary");
@@ -70,15 +71,32 @@ router.delete(
   requireRole("admin"),
   async (req, res) => {
     try {
+      if (!mongoose.isObjectIdOrHexString(req.params.id)) {
+        return res.status(400).json({ message: "Invalid image id" });
+      }
+
       const image = await Image.findById(req.params.id);
       if (!image) {
         return res.status(404).json({ message: "Image not found" });
       }
 
-      await cloudinary.uploader.destroy(image.publicId);
+      if (!isCloudinaryImage(image)) {
+        return res.status(409).json({ message: "Image is not stored in Cloudinary" });
+      }
+
+      const result = await cloudinary.uploader.destroy(image.publicId, {
+        resource_type: "image",
+      });
+      if (result.result !== "ok" && result.result !== "not found") {
+        throw new Error(`Unexpected Cloudinary deletion result: ${result.result}`);
+      }
+
       await image.deleteOne();
 
-      res.json({ message: "Image deleted successfully" });
+      res.json({
+        message: "Image deleted successfully",
+        imageId: image._id,
+      });
     } catch (err) {
       console.error("Error deleting image:", err);
       res.status(500).json({ message: "Error deleting image" });
