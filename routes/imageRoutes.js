@@ -6,7 +6,7 @@ const Image = require("../models/Image");
 const cloudinary = require("../config/cloudinary");
 const upload = require("../config/multerCloudinary");
 const { authenticateToken, requireRole } = require("../middleware/auth");
-const { filterAccessibleImages, isCloudinaryImage } = require("../utils/cloudinaryValidation");
+const { isCloudinaryImage } = require("../utils/cloudinaryValidation");
 
 // GET all images (public)
 router.get("/", async (req, res) => {
@@ -18,16 +18,7 @@ router.get("/", async (req, res) => {
       ],
     }).sort({ createdAt: -1 });
 
-    const validImages = await filterAccessibleImages(images.filter(isCloudinaryImage));
-    const invalidIds = images
-      .filter((image) => image && image._id && !validImages.some((validImage) => validImage._id.toString() === image._id.toString()))
-      .map((image) => image._id);
-
-    if (invalidIds.length > 0) {
-      await Image.deleteMany({ _id: { $in: invalidIds } });
-    }
-
-    res.json(validImages);
+    res.json(images.filter(isCloudinaryImage));
   } catch (err) {
     console.error("Error fetching images:", err);
     res.status(500).json({ message: "Error retrieving images" });
